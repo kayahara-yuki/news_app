@@ -1,0 +1,52 @@
+{
+  "project": {
+    "name": "news_sns",
+    "description": "ニュースSNSアプリケーション",
+    "repository": ""
+  },
+  "kanban": {
+    "columns": [
+      {
+        "id": "todo",
+        "name": "Todo",
+        "color": "#6B7280"
+      },
+      {
+        "id": "in_progress",
+        "name": "In Progress",
+        "color": "#3B82F6"
+      },
+      {
+        "id": "in_review",
+        "name": "In Review",
+        "color": "#F59E0B"
+      },
+      {
+        "id": "done",
+        "name": "Done",
+        "color": "#10B981"
+      }
+    ]
+  },
+  "tasks": {
+    "path": ".cc-sdd/tasks",
+    "pattern": "TASK-*.md",
+    "statusMapping": {
+      "Todo": "todo",
+      "In Progress": "in_progress",
+      "In Review": "in_review",
+      "Done": "done"
+    }
+  },
+  "automation": {
+    "autoCreatePR": false,
+    "autoMoveOnMerge": true,
+    "notifyOnStatusChange": false
+  },
+  "display": {
+    "showEstimatedTime": true,
+    "showPriority": true,
+    "showAssignee": true,
+    "showJapaneseTitle": true
+  }
+}

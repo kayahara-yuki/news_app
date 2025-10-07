@@ -1,0 +1,24 @@
+{
+  "projectName": "news_sns",
+  "projectType": "iOS App (Swift)",
+  "language": "ja",
+  "workflow": {
+    "phases": [
+      "steering",
+      "spec-init",
+      "spec-requirements",
+      "spec-design",
+      "spec-tasks",
+      "spec-impl"
+    ]
+  },
+  "kanban": {
+    "enabled": true,
+    "tool": "vibe-kanban",
+    "taskFormat": "markdown"
+  },
+  "documentation": {
+    "path": ".cc-sdd/docs",
+    "autoGenerate": true
+  }
+}

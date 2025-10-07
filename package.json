@@ -1,0 +1,29 @@
+{
+  "name": "news_sns",
+  "version": "1.0.0",
+  "description": "ニュースSNSアプリケーション - cc-sdd + Vibe Kanban でタスク管理",
+  "scripts": {
+    "kanban": "PORT=3000 npx vibe-kanban",
+    "kanban:dev": "PORT=3001 npx vibe-kanban",
+    "cc-sdd:init": "npx cc-sdd@latest --lang ja",
+    "cc-sdd:status": "echo 'タスクステータスを確認するには /kiro:spec-status を実行してください'"
+  },
+  "keywords": [
+    "news",
+    "sns",
+    "ios",
+    "swift",
+    "cc-sdd",
+    "vibe-kanban"
+  ],
+  "author": "zeroplus-shere2",
+  "license": "MIT",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/news_sns.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
