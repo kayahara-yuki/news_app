@@ -1,0 +1,11 @@
+{
+  "name": "cc-sdd-vibe-kanban",
+  "version": "1.0.0",
+  "description": "Vibe Kanban task management for cc-sdd project",
+  "scripts": {
+    "kanban": "vibe-kanban"
+  },
+  "keywords": ["kanban", "task-management"],
+  "author": "zeroplus-shere2",
+  "license": "MIT"
+}
