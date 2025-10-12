@@ -1,0 +1,293 @@
+import SwiftUI
+import MapKit
+
+// MARK: - カスタム投稿アノテーションビュー
+
+class PostMapAnnotationView: MKAnnotationView {
+    static let reuseIdentifier = "PostMapAnnotation"
+    
+    override var annotation: MKAnnotation? {
+        didSet {
+            guard let postAnnotation = annotation as? PostAnnotation else { return }
+            configureView(for: postAnnotation)
+        }
+    }
+    
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        setupView()
+    }
+    
+    required init?(coder aDecoder: NSCoder) {
+        super.init(coder: aDecoder)
+        setupView()
+    }
+    
+    private func setupView() {
+        canShowCallout = true
+        
+        // カスタムビューの設定
+        let size: CGFloat = 40
+        frame = CGRect(x: 0, y: 0, width: size, height: size)
+        centerOffset = CGPoint(x: 0, y: -size / 2)
+        
+        // 右側のアクセサリビュー
+        rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
+    }
+    
+    private func configureView(for postAnnotation: PostAnnotation) {
+        // カスタムイメージビューを作成
+        let imageView = createAnnotationImageView(for: postAnnotation.post)
+        
+        // 既存のサブビューを削除
+        subviews.forEach { $0.removeFromSuperview() }
+        
+        // 新しいイメージビューを追加
+        addSubview(imageView)
+        
+        // コールアウトビューの設定
+        if let calloutView = createCalloutView(for: postAnnotation.post) {
+            detailCalloutAccessoryView = calloutView
+        }
+    }
+    
+    private func createAnnotationImageView(for post: Post) -> UIView {
+        let containerView = UIView(frame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        
+        // 背景円
+        let circleView = UIView(frame: containerView.bounds)
+        circleView.layer.cornerRadius = 20
+        circleView.backgroundColor = post.emergencyLevel != nil ? .systemRed : .systemBlue
+        containerView.addSubview(circleView)
+        
+        // アイコン
+        let iconImageView = UIImageView(frame: CGRect(x: 8, y: 8, width: 24, height: 24))
+        iconImageView.contentMode = .scaleAspectFit
+        iconImageView.tintColor = .white
+        
+        if post.emergencyLevel != nil {
+            iconImageView.image = UIImage(systemName: "exclamationmark.triangle.fill")
+        } else {
+            iconImageView.image = UIImage(systemName: "newspaper.fill")
+        }
+        
+        containerView.addSubview(iconImageView)
+        
+        // 信頼スコアインジケータ
+        if post.trustScore >= 0.8 {
+            let badgeView = UIView(frame: CGRect(x: 28, y: 0, width: 12, height: 12))
+            badgeView.layer.cornerRadius = 6
+            badgeView.backgroundColor = .systemGreen
+            badgeView.layer.borderWidth = 2
+            badgeView.layer.borderColor = UIColor.white.cgColor
+            containerView.addSubview(badgeView)
+        }
+        
+        return containerView
+    }
+    
+    private func createCalloutView(for post: Post) -> UIView? {
+        let hostingController = UIHostingController(
+            rootView: PostCalloutView(post: post)
+        )
+        
+        hostingController.view.backgroundColor = .clear
+        return hostingController.view
+    }
+}
+
+// MARK: - SwiftUI Callout View
+
+struct PostCalloutView: View {
+    let post: Post
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // ユーザー情報
+            HStack {
+                if let avatarURL = post.user.avatarURL {
+                    AsyncImage(url: URL(string: avatarURL)) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        Image(systemName: "person.circle.fill")
+                            .foregroundColor(.gray)
+                    }
+                    .frame(width: 30, height: 30)
+                    .clipShape(Circle())
+                } else {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundColor(.gray)
+                }
+                
+                VStack(alignment: .leading) {
+                    Text(post.user.displayName ?? post.user.username)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                    
+                    Text(post.createdAt.formatted(.relative(presentation: .named)))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                if post.user.isVerified {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundColor(.blue)
+                        .font(.caption)
+                }
+            }
+            
+            // 投稿内容プレビュー
+            Text(post.content)
+                .font(.caption)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            // 緊急度表示
+            if let emergencyLevel = post.emergencyLevel {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text("緊急度: \(emergencyLevel.displayName)")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                }
+            }
+            
+            // エンゲージメント情報
+            HStack {
+                Label("\(post.likeCount)", systemImage: "heart.fill")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                
+                Label("\(post.commentCount)", systemImage: "bubble.fill")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                // 信頼スコア
+                HStack(spacing: 2) {
+                    Image(systemName: "shield.fill")
+                        .foregroundColor(trustScoreColor)
+                    Text(String(format: "%.0f%%", post.trustScore * 100))
+                        .foregroundColor(trustScoreColor)
+                }
+                .font(.caption2)
+            }
+        }
+        .padding(12)
+        .frame(width: 280)
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+    }
+    
+    private var trustScoreColor: Color {
+        if post.trustScore >= 0.8 {
+            return .green
+        } else if post.trustScore >= 0.5 {
+            return .orange
+        } else {
+            return .red
+        }
+    }
+}
+
+// MARK: - Cluster Annotation View
+
+class PostClusterAnnotationView: MKAnnotationView {
+    static let reuseIdentifier = "PostClusterAnnotation"
+    
+    override var annotation: MKAnnotation? {
+        didSet {
+            guard let cluster = annotation as? MKClusterAnnotation else { return }
+            configureView(for: cluster)
+        }
+    }
+    
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        setupView()
+    }
+    
+    required init?(coder aDecoder: NSCoder) {
+        super.init(coder: aDecoder)
+        setupView()
+    }
+    
+    private func setupView() {
+        canShowCallout = true
+        
+        let size: CGFloat = 50
+        frame = CGRect(x: 0, y: 0, width: size, height: size)
+        centerOffset = CGPoint(x: 0, y: -size / 2)
+    }
+    
+    private func configureView(for cluster: MKClusterAnnotation) {
+        // カウントに基づいてサイズを調整
+        let count = cluster.memberAnnotations.count
+        let size = sizeForClusterCount(count)
+        frame = CGRect(x: 0, y: 0, width: size, height: size)
+        
+        // 背景円
+        let circleView = UIView(frame: bounds)
+        circleView.layer.cornerRadius = size / 2
+        circleView.backgroundColor = colorForClusterCount(count)
+        
+        // カウントラベル
+        let label = UILabel(frame: bounds)
+        label.text = "\(count)"
+        label.textAlignment = .center
+        label.textColor = .white
+        label.font = .systemFont(ofSize: fontSizeForClusterCount(count), weight: .bold)
+        
+        // サブビューをクリア
+        subviews.forEach { $0.removeFromSuperview() }
+        
+        // 新しいビューを追加
+        addSubview(circleView)
+        addSubview(label)
+        
+        // 緊急投稿が含まれているかチェック
+        let hasEmergency = cluster.memberAnnotations.contains { annotation in
+            (annotation as? PostAnnotation)?.post.emergencyLevel != nil
+        }
+        
+        if hasEmergency {
+            circleView.layer.borderWidth = 3
+            circleView.layer.borderColor = UIColor.systemRed.cgColor
+        }
+    }
+    
+    private func sizeForClusterCount(_ count: Int) -> CGFloat {
+        switch count {
+        case 0...5: return 40
+        case 6...10: return 45
+        case 11...20: return 50
+        case 21...50: return 55
+        default: return 60
+        }
+    }
+    
+    private func colorForClusterCount(_ count: Int) -> UIColor {
+        switch count {
+        case 0...5: return .systemBlue
+        case 6...10: return .systemIndigo
+        case 11...20: return .systemPurple
+        default: return .systemOrange
+        }
+    }
+    
+    private func fontSizeForClusterCount(_ count: Int) -> CGFloat {
+        switch count {
+        case 0...5: return 14
+        case 6...10: return 16
+        case 11...20: return 18
+        default: return 20
+        }
+    }
+}
