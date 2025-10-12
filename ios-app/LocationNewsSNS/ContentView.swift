@@ -7,20 +7,43 @@ struct ContentView: View {
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
     @State private var showingPostCreation = false
+    @State private var selectedPost: Post?
+    @State private var showingPostDetail = false
+    @StateObject private var viewModel = NearbyPostsViewModel()
 
     var body: some View {
         TabView {
             // メイン地図画面
             NavigationStack {
                 ZStack {
-                    Map(coordinateRegion: $region)
-                        .ignoresSafeArea()
+                    Map(coordinateRegion: $region, annotationItems: viewModel.posts) { post in
+                        MapAnnotation(coordinate: CLLocationCoordinate2D(
+                            latitude: post.latitude ?? 35.6762,
+                            longitude: post.longitude ?? 139.6503
+                        )) {
+                            VStack(spacing: 0) {
+                                Image(systemName: post.isUrgent ? "exclamationmark.triangle.fill" : "mappin.circle.fill")
+                                    .font(.title)
+                                    .foregroundColor(post.isUrgent ? .red : .blue)
+                                    .background(
+                                        Circle()
+                                            .fill(.white)
+                                            .frame(width: 32, height: 32)
+                                    )
+                            }
+                            .onTapGesture {
+                                selectedPost = post
+                                showingPostDetail = true
+                            }
+                        }
+                    }
+                    .ignoresSafeArea()
 
                     VStack {
                         Spacer()
 
                         // Liquid Glass エフェクトのボトムシート
-                        PostListBottomSheet()
+                        PostListBottomSheet(viewModel: viewModel)
                     }
                 }
                 .navigationTitle("地図SNS")
@@ -37,6 +60,11 @@ struct ContentView: View {
                 }
                 .sheet(isPresented: $showingPostCreation) {
                     PostCreationView()
+                }
+                .sheet(isPresented: $showingPostDetail) {
+                    if let post = selectedPost {
+                        PostDetailSheet(post: post)
+                    }
                 }
             }
             .tabItem {
@@ -72,7 +100,7 @@ struct ContentView: View {
 }
 
 struct PostListBottomSheet: View {
-    @StateObject private var viewModel = NearbyPostsViewModel()
+    @ObservedObject var viewModel: NearbyPostsViewModel
     @State private var selectedPost: Post?
     @State private var showingPostDetail = false
     @State private var scrollPosition: Int?
@@ -106,6 +134,7 @@ struct PostListBottomSheet: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 16) {
                         ForEach(Array(viewModel.posts.enumerated()), id: \.element.id) { index, post in
+                            let _ = print("🎨 [ContentView] 投稿を表示: \(post.id) - \(post.content.prefix(30))...")
                             CarouselPostCardView(
                                 post: post,
                                 isSelected: selectedPost?.id == post.id,
@@ -142,6 +171,7 @@ struct PostListBottomSheet: View {
             }
         }
         .onAppear {
+            print("👀 [ContentView] PostListBottomSheet.onAppear - viewModel.posts.count: \(viewModel.posts.count)")
             viewModel.fetchNearbyPosts()
         }
     }
@@ -314,6 +344,154 @@ struct ProfileView: View {
         .padding()
         .navigationTitle("プロフィール")
         .navigationBarTitleDisplayMode(.large)
+    }
+}
+
+// MARK: - Post Detail Sheet
+struct PostDetailSheet: View {
+    let post: Post
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // User Info Section
+                    HStack(spacing: 12) {
+                        AsyncImage(url: URL(string: post.user.avatarURL ?? "")) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            Image(systemName: "person.circle.fill")
+                                .resizable()
+                                .foregroundColor(.gray)
+                        }
+                        .frame(width: 50, height: 50)
+                        .clipShape(Circle())
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            if let displayName = post.user.displayName {
+                                Text(displayName)
+                                    .font(.headline)
+                            }
+                            Text("@\(post.user.username)")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+
+                    Divider()
+
+                    // Post Content Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(post.content)
+                            .font(.body)
+                            .lineSpacing(4)
+
+                        // Badges
+                        HStack(spacing: 8) {
+                            if post.isUrgent {
+                                Label("緊急", systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Color.red)
+                                    .cornerRadius(12)
+                            }
+
+                            if post.isVerified {
+                                Label("検証済み", systemImage: "checkmark.seal.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Color.blue)
+                                    .cornerRadius(12)
+                            }
+
+                            Text(post.category.displayName)
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.gray)
+                                .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    Divider()
+
+                    // Location Section
+                    if post.latitude != nil && post.longitude != nil {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("位置情報", systemImage: "location.fill")
+                                .font(.headline)
+
+                            if let address = post.address {
+                                Text(address)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("緯度: \(post.latitude!, specifier: "%.6f"), 経度: \(post.longitude!, specifier: "%.6f")")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.horizontal)
+
+                        Divider()
+                    }
+
+                    // Stats Section
+                    HStack(spacing: 24) {
+                        Label("\(post.likeCount)", systemImage: "heart.fill")
+                            .foregroundColor(.red)
+
+                        Label("\(post.commentCount)", systemImage: "bubble.left.fill")
+                            .foregroundColor(.blue)
+
+                        Label("\(post.shareCount)", systemImage: "square.and.arrow.up.fill")
+                            .foregroundColor(.green)
+                    }
+                    .font(.subheadline)
+                    .padding(.horizontal)
+
+                    Divider()
+
+                    // Timestamp Section
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("投稿日時")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Text(post.createdAt, style: .date)
+                            .font(.subheadline)
+                        Text(post.createdAt, style: .time)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+
+                    Spacer(minLength: 20)
+                }
+                .padding(.vertical)
+            }
+            .navigationTitle("投稿詳細")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
