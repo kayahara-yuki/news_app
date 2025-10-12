@@ -47,7 +47,9 @@ class NearbyPostsViewModel: ObservableObject {
     // MARK: - Fetch Methods
 
     func fetchNearbyPosts() {
+        print("🔍 [NearbyPostsViewModel] fetchNearbyPosts() called")
         guard let location = dependencies.locationService.currentLocation else {
+            print("⚠️ [NearbyPostsViewModel] 位置情報がない - デフォルト位置（東京駅）を使用")
             // 位置情報がない場合はデフォルト位置（東京駅）を使用
             Task {
                 await fetchNearbyPostsForCoordinate(
@@ -59,6 +61,7 @@ class NearbyPostsViewModel: ObservableObject {
             return
         }
 
+        print("✅ [NearbyPostsViewModel] 位置情報あり: lat=\(location.coordinate.latitude), lng=\(location.coordinate.longitude)")
         Task {
             await fetchNearbyPostsForLocation(location)
         }
@@ -95,6 +98,7 @@ class NearbyPostsViewModel: ObservableObject {
         longitude: Double,
         radius: Double
     ) async {
+        print("📍 [NearbyPostsViewModel] fetchNearbyPostsForCoordinate - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
         do {
             isLoading = true
             errorMessage = nil
@@ -105,9 +109,12 @@ class NearbyPostsViewModel: ObservableObject {
                 radius: radius
             )
 
+            print("✅ [NearbyPostsViewModel] データ取得完了")
+
             // 距離を計算して設定
             let userLocation = CLLocation(latitude: latitude, longitude: longitude)
             if let postService = dependencies.postService as? PostService {
+                print("📊 [NearbyPostsViewModel] PostServiceから取得した投稿数: \(postService.nearbyPosts.count)")
                 posts = postService.nearbyPosts.map { post in
                     var updatedPost = post
                     if let postLocation = post.location {
@@ -116,10 +123,14 @@ class NearbyPostsViewModel: ObservableObject {
                     }
                     return updatedPost
                 }
+                print("📊 [NearbyPostsViewModel] ViewModelに設定した投稿数: \(posts.count)")
+            } else {
+                print("❌ [NearbyPostsViewModel] PostServiceのキャストに失敗")
             }
 
             isLoading = false
         } catch {
+            print("❌ [NearbyPostsViewModel] エラー: \(error.localizedDescription)")
             errorMessage = "投稿の取得に失敗しました: \(error.localizedDescription)"
             isLoading = false
         }

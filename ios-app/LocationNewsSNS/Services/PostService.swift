@@ -72,28 +72,33 @@ class PostService: ObservableObject, PostServiceProtocol {
     
     /// 近隣の投稿を取得
     func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double) async {
+        print("🌐 [PostService] fetchNearbyPosts called - lat: \(latitude), lng: \(longitude), radius: \(radius)")
         isLoading = true
         defer { isLoading = false }
-        
+
         do {
             let posts = try await postRepository.fetchNearbyPosts(
                 latitude: latitude,
                 longitude: longitude,
                 radius: radius
             )
-            
+
+            print("✅ [PostService] Repository から \(posts.count) 件の投稿を取得")
+
             await MainActor.run {
                 self.nearbyPosts = posts
                 self.errorMessage = nil
+                print("✅ [PostService] nearbyPosts に \(posts.count) 件を設定完了")
             }
-            
+
             // リアルタイム監視を開始
             realtimePostManager?.startMonitoringNearbyPosts(
                 center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
                 radius: radius
             )
-            
+
         } catch {
+            print("❌ [PostService] エラー: \(error)")
             print("投稿取得エラー: \(error)")
             await MainActor.run {
                 self.errorMessage = "投稿の取得に失敗しました: \(error.localizedDescription)"
@@ -197,7 +202,7 @@ class PostService: ObservableObject, PostServiceProtocol {
         if let index = nearbyPosts.firstIndex(where: { $0.id == postID }) {
             let updatedPost = nearbyPosts[index]
             let newLikeCount = increment ? updatedPost.likeCount + 1 : max(0, updatedPost.likeCount - 1)
-            
+
             // Postは値型なので、新しいインスタンスを作成
             let newPost = Post(
                 id: updatedPost.id,
@@ -209,25 +214,23 @@ class PostService: ObservableObject, PostServiceProtocol {
                 address: updatedPost.address,
                 category: updatedPost.category,
                 visibility: updatedPost.visibility,
-                isEmergency: updatedPost.isEmergency,
-                emergencyLevel: updatedPost.emergencyLevel,
-                trustScore: updatedPost.trustScore,
-                mediaFiles: updatedPost.mediaFiles,
+                isUrgent: updatedPost.isUrgent,
+                isVerified: updatedPost.isVerified,
                 likeCount: newLikeCount,
                 commentCount: updatedPost.commentCount,
                 shareCount: updatedPost.shareCount,
                 createdAt: updatedPost.createdAt,
                 updatedAt: updatedPost.updatedAt
             )
-            
+
             nearbyPosts[index] = newPost
         }
-        
+
         // postsも更新
         if let index = posts.firstIndex(where: { $0.id == postID }) {
             let updatedPost = posts[index]
             let newLikeCount = increment ? updatedPost.likeCount + 1 : max(0, updatedPost.likeCount - 1)
-            
+
             let newPost = Post(
                 id: updatedPost.id,
                 user: updatedPost.user,
@@ -238,10 +241,8 @@ class PostService: ObservableObject, PostServiceProtocol {
                 address: updatedPost.address,
                 category: updatedPost.category,
                 visibility: updatedPost.visibility,
-                isEmergency: updatedPost.isEmergency,
-                emergencyLevel: updatedPost.emergencyLevel,
-                trustScore: updatedPost.trustScore,
-                mediaFiles: updatedPost.mediaFiles,
+                isUrgent: updatedPost.isUrgent,
+                isVerified: updatedPost.isVerified,
                 likeCount: newLikeCount,
                 commentCount: updatedPost.commentCount,
                 shareCount: updatedPost.shareCount,
