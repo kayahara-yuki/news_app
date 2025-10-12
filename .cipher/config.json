@@ -1,0 +1,50 @@
+{
+  "memory": {
+    "system1": {
+      "enabled": true,
+      "maxEntries": 1000,
+      "retentionDays": 90
+    },
+    "system2": {
+      "enabled": true,
+      "trackReasoningSteps": true
+    }
+  },
+  "workspace": {
+    "sharedMemory": true,
+    "teamId": "news-sns-ios-team"
+  },
+  "embedder": {
+    "type": "local",
+    "model": "text-embedding-ada-002"
+  },
+  "privacy": {
+    "localOnly": true,
+    "encryptMemory": true
+  },
+  "performance": {
+    "indexing": "incremental",
+    "searchStrategy": "hybrid",
+    "cacheExpiry": 3600,
+    "maxStorageGB": 2
+  },
+  "ios_development": {
+    "track_patterns": [
+      "SwiftUI view patterns",
+      "MVVM architecture decisions",
+      "Core Data implementations",
+      "Network layer patterns",
+      "UI/UX best practices",
+      "Performance optimizations",
+      "Testing strategies"
+    ],
+    "exclude_patterns": [
+      "**/*.xcuserstate",
+      "**/DerivedData/**",
+      "**/*.ipa",
+      "**/*.dSYM",
+      "**/*.mobileprovision",
+      "**/GoogleService-Info.plist"
+    ]
+  }
+}

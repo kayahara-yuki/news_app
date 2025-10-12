@@ -1,0 +1,177 @@
+name: iOS CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+jobs:
+  test:
+    name: Test
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Select Xcode
+      run: sudo xcode-select -switch /Applications/Xcode_15.4.app/Contents/Developer
+      
+    - name: Cache Swift Package Manager
+      uses: actions/cache@v4
+      with:
+        path: |
+          ios-app/LocationNewsSNS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+        key: ${{ runner.os }}-spm-${{ hashFiles('ios-app/Package.swift') }}
+        restore-keys: |
+          ${{ runner.os }}-spm-
+          
+    - name: Install dependencies
+      run: |
+        cd ios-app
+        xcodebuild -resolvePackageDependencies -project LocationNewsSNS.xcodeproj
+        
+    - name: Build and Test
+      run: |
+        cd ios-app
+        xcodebuild clean build test \
+          -project LocationNewsSNS.xcodeproj \
+          -scheme LocationNewsSNS \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5' \
+          -derivedDataPath DerivedData \
+          -enableCodeCoverage YES \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+          
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          ios-app/DerivedData/Logs/Test/*.xcresult
+          
+    - name: Generate Code Coverage Report
+      run: |
+        cd ios-app
+        xcrun xccov view DerivedData/Logs/Test/*.xcresult --report --json > coverage.json
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ios-app/coverage.json
+        flags: ios
+        name: iOS Coverage
+
+  lint:
+    name: SwiftLint
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: SwiftLint
+      uses: norio-nomura/action-swiftlint@3.2.1
+      with:
+        args: --strict --config .swiftlint.yml
+
+  build:
+    name: Build Archive
+    runs-on: macos-14
+    needs: [test, lint]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Select Xcode
+      run: sudo xcode-select -switch /Applications/Xcode_15.4.app/Contents/Developer
+      
+    - name: Install the Apple certificate and provisioning profile
+      env:
+        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      run: |
+        # create variables
+        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+        # import certificate and provisioning profile from secrets
+        echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+        echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+        # create temporary keychain
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+        # import certificate to keychain
+        security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+        security list-keychain -d user -s $KEYCHAIN_PATH
+
+        # apply provisioning profile
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+        
+    - name: Build Archive
+      run: |
+        cd ios-app
+        xcodebuild archive \
+          -project LocationNewsSNS.xcodeproj \
+          -scheme LocationNewsSNS \
+          -configuration Release \
+          -destination 'generic/platform=iOS' \
+          -archivePath $RUNNER_TEMP/LocationNewsSNS.xcarchive
+          
+    - name: Export IPA
+      run: |
+        cd ios-app
+        xcodebuild -exportArchive \
+          -archivePath $RUNNER_TEMP/LocationNewsSNS.xcarchive \
+          -exportOptionsPlist ExportOptions.plist \
+          -exportPath $RUNNER_TEMP/build
+          
+    - name: Upload IPA
+      uses: actions/upload-artifact@v4
+      with:
+        name: LocationNewsSNS.ipa
+        path: $RUNNER_TEMP/build/LocationNewsSNS.ipa
+
+  deploy:
+    name: Deploy to TestFlight
+    runs-on: macos-14
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Download IPA
+      uses: actions/download-artifact@v4
+      with:
+        name: LocationNewsSNS.ipa
+        path: ./
+        
+    - name: Upload to TestFlight
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        xcrun altool --upload-app \
+          --type ios \
+          --file ./LocationNewsSNS.ipa \
+          --username "$APPLE_ID" \
+          --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+          --asc-provider "$APPLE_TEAM_ID"

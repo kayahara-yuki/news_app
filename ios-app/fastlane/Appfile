@@ -1,0 +1,23 @@
+# The bundle identifier of your app
+app_identifier("com.locationnewssns.app")
+
+# Your Apple ID email address
+apple_id("your-apple-id@example.com")
+
+# For more information about the Appfile, see:
+#     https://docs.fastlane.tools/advanced/#appfile
+
+# Your Apple Developer Team ID
+team_id("YOUR_TEAM_ID")
+
+# You can uncomment the line below to automatically use the latest provisioning profile
+# automatically_use_latest_provisioning_profile(true)
+
+# You can uncomment the line below to set the iTunes Connect team id if it differs from the App Store Connect team id
+# itunes_connect_team_id("YOUR_ITC_TEAM_ID")
+
+# Specify the workspace
+# workspace("LocationNewsSNS.xcworkspace")
+
+# Specify the project
+# project("LocationNewsSNS.xcodeproj")

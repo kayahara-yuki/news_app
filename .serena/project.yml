@@ -1,0 +1,65 @@
+project_name: "news-sns-ios"
+language: swift
+entry_points:
+  - App.swift
+  - ContentView.swift
+  - "**/*View.swift"
+  - "**/*Model.swift"
+  - "**/*ViewModel.swift"
+ignored_dirs:
+  - .git
+  - build
+  - DerivedData
+  - .swiftpm
+  - xcuserdata
+  - .DS_Store
+  - Pods
+  - Carthage
+  - fastlane/report.xml
+  - fastlane/Preview.html
+  - fastlane/screenshots
+  - fastlane/test_output
+ignored_files:
+  - "*.xcuserstate"
+  - "*.xcworkspacedata"
+  - "*.xcscheme"
+  - "*.log"
+  - "*.tmp"
+  - ".env*"
+  - "*.jpg"
+  - "*.png"
+  - "*.pdf"
+  - "*.zip"
+  - "*.ipa"
+  - "*.dSYM"
+max_file_size: 1048576  # 1MB
+show_logs: true
+use_lsp: true
+
+# Swift/iOS特有の設定
+swift:
+  enable_sourcekit_lsp: true
+  xcodeproj_paths:
+    - "*.xcodeproj"
+    - "*.xcworkspace"
+  target_platforms:
+    - iOS
+    - macOS
+  swift_version: "5.9"
+
+# セキュリティ設定
+security:
+  exclude_sensitive:
+    - "**/*.key"
+    - "**/*.pem"
+    - "**/secrets/**"
+    - "**/*.mobileprovision"
+    - "**/GoogleService-Info.plist"
+    - "**/Config.plist"
+  sanitize_logs: true
+
+# パフォーマンス設定
+performance:
+  max_memory: 2048  # MB
+  cache_size: 512   # MB
+  lazy_loading: true

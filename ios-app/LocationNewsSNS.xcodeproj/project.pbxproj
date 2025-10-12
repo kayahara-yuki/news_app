@@ -6,41 +6,46 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F49F22DD2E982D2C0032FDB0 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = F49F22DC2E982D2C0032FDB0 /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
-		F46FCEEF2E94B18100396C22 /* news_sns.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = news_sns.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F49F22A32E982C250032FDB0 /* LocationNewsSNS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocationNewsSNS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		F46FCEF12E94B18100396C22 /* news_sns */ = {
+		F49F22A52E982C250032FDB0 /* LocationNewsSNS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = news_sns;
+			path = LocationNewsSNS;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		F46FCEEC2E94B18100396C22 /* Frameworks */ = {
+		F49F22A02E982C250032FDB0 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F49F22DD2E982D2C0032FDB0 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		F46FCEE62E94B18100396C22 = {
+		F49F229A2E982C250032FDB0 = {
 			isa = PBXGroup;
 			children = (
-				F46FCEF12E94B18100396C22 /* news_sns */,
-				F46FCEF02E94B18100396C22 /* Products */,
+				F49F22A52E982C250032FDB0 /* LocationNewsSNS */,
+				F49F22A42E982C250032FDB0 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		F46FCEF02E94B18100396C22 /* Products */ = {
+		F49F22A42E982C250032FDB0 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				F46FCEEF2E94B18100396C22 /* news_sns.app */,
+				F49F22A32E982C250032FDB0 /* LocationNewsSNS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,64 +53,68 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		F46FCEEE2E94B18100396C22 /* news_sns */ = {
+		F49F22A22E982C250032FDB0 /* LocationNewsSNS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = F46FCEFA2E94B18200396C22 /* Build configuration list for PBXNativeTarget "news_sns" */;
+			buildConfigurationList = F49F22AE2E982C260032FDB0 /* Build configuration list for PBXNativeTarget "LocationNewsSNS" */;
 			buildPhases = (
-				F46FCEEB2E94B18100396C22 /* Sources */,
-				F46FCEEC2E94B18100396C22 /* Frameworks */,
-				F46FCEED2E94B18100396C22 /* Resources */,
+				F49F229F2E982C250032FDB0 /* Sources */,
+				F49F22A02E982C250032FDB0 /* Frameworks */,
+				F49F22A12E982C250032FDB0 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				F46FCEF12E94B18100396C22 /* news_sns */,
+				F49F22A52E982C250032FDB0 /* LocationNewsSNS */,
 			);
-			name = news_sns;
+			name = LocationNewsSNS;
 			packageProductDependencies = (
+				F49F22DC2E982D2C0032FDB0 /* Supabase */,
 			);
-			productName = news_sns;
-			productReference = F46FCEEF2E94B18100396C22 /* news_sns.app */;
+			productName = LocationNewsSNS;
+			productReference = F49F22A32E982C250032FDB0 /* LocationNewsSNS.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		F46FCEE72E94B18100396C22 /* Project object */ = {
+		F49F229B2E982C250032FDB0 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
-					F46FCEEE2E94B18100396C22 = {
+					F49F22A22E982C250032FDB0 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
-			buildConfigurationList = F46FCEEA2E94B18100396C22 /* Build configuration list for PBXProject "news_sns" */;
+			buildConfigurationList = F49F229E2E982C250032FDB0 /* Build configuration list for PBXProject "LocationNewsSNS" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = F46FCEE62E94B18100396C22;
+			mainGroup = F49F229A2E982C250032FDB0;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F49F22D62E982D130032FDB0 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = F46FCEF02E94B18100396C22 /* Products */;
+			productRefGroup = F49F22A42E982C250032FDB0 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				F46FCEEE2E94B18100396C22 /* news_sns */,
+				F49F22A22E982C250032FDB0 /* LocationNewsSNS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		F46FCEED2E94B18100396C22 /* Resources */ = {
+		F49F22A12E982C250032FDB0 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -115,7 +124,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		F46FCEEB2E94B18100396C22 /* Sources */ = {
+		F49F229F2E982C250032FDB0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -125,7 +134,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		F46FCEF82E94B18200396C22 /* Debug */ = {
+		F49F22AC2E982C260032FDB0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -177,7 +186,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -188,7 +197,7 @@
 			};
 			name = Debug;
 		};
-		F46FCEF92E94B18200396C22 /* Release */ = {
+		F49F22AD2E982C260032FDB0 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -234,7 +243,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -244,9 +253,10 @@
 			};
 			name = Release;
 		};
-		F46FCEFB2E94B18200396C22 /* Debug */ = {
+		F49F22AF2E982C260032FDB0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			buildSettings = {
+			INFOPLIST_FILE = LocationNewsSNS/Info.plist;
+				buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -263,7 +273,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "yuki.news-sns";
+				PRODUCT_BUNDLE_IDENTIFIER = yuki.LocationNewsSNS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -275,9 +285,10 @@
 			};
 			name = Debug;
 		};
-		F46FCEFC2E94B18200396C22 /* Release */ = {
+		F49F22B02E982C260032FDB0 /* Release */ = {
 			isa = XCBuildConfiguration;
-			buildSettings = {
+			INFOPLIST_FILE = LocationNewsSNS/Info.plist;
+				buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -294,7 +305,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "yuki.news-sns";
+				PRODUCT_BUNDLE_IDENTIFIER = yuki.LocationNewsSNS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -309,25 +320,44 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		F46FCEEA2E94B18100396C22 /* Build configuration list for PBXProject "news_sns" */ = {
+		F49F229E2E982C250032FDB0 /* Build configuration list for PBXProject "LocationNewsSNS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				F46FCEF82E94B18200396C22 /* Debug */,
-				F46FCEF92E94B18200396C22 /* Release */,
+				F49F22AC2E982C260032FDB0 /* Debug */,
+				F49F22AD2E982C260032FDB0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		F46FCEFA2E94B18200396C22 /* Build configuration list for PBXNativeTarget "news_sns" */ = {
+		F49F22AE2E982C260032FDB0 /* Build configuration list for PBXNativeTarget "LocationNewsSNS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				F46FCEFB2E94B18200396C22 /* Debug */,
-				F46FCEFC2E94B18200396C22 /* Release */,
+				F49F22AF2E982C260032FDB0 /* Debug */,
+				F49F22B02E982C260032FDB0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F49F22D62E982D130032FDB0 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F49F22DC2E982D2C0032FDB0 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F49F22D62E982D130032FDB0 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = F46FCEE72E94B18100396C22 /* Project object */;
+	rootObject = F49F229B2E982C250032FDB0 /* Project object */;
 }
