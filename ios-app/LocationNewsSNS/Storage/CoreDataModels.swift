@@ -41,12 +41,12 @@ extension CachedPost {
         self.content = post.content
         self.latitude = post.latitude ?? 0
         self.longitude = post.longitude ?? 0
-        self.trustScore = post.trustScore
+        self.trustScore = 0.0 // trustScoreはモデルから削除されたため0で固定
         self.likeCount = Int32(post.likeCount)
         self.commentCount = Int32(post.commentCount)
         self.shareCount = Int32(post.shareCount)
         self.visibility = post.visibility.rawValue
-        self.emergencyLevel = post.emergencyLevel?.rawValue
+        self.emergencyLevel = post.isUrgent ? "high" : nil // isUrgentに対応
         self.userID = post.user.id
         self.username = post.user.username
         self.userDisplayName = post.user.displayName
@@ -54,19 +54,12 @@ extension CachedPost {
         self.createdAt = post.createdAt
         self.updatedAt = post.updatedAt
         self.cachedAt = Date()
-        
-        // Encode media files as JSON data
-        self.mediaFilesData = try? JSONEncoder().encode(post.mediaFiles)
+
+        // Media filesはモデルから削除されたため空配列
+        self.mediaFilesData = try? JSONEncoder().encode([MediaFile]())
     }
     
     func toPost() -> Post? {
-        // Decode media files
-        var mediaFiles: [MediaFile] = []
-
-        if let mediaData = mediaFilesData {
-            mediaFiles = (try? JSONDecoder().decode([MediaFile].self, from: mediaData)) ?? []
-        }
-        
         let user = UserProfile(
             id: userID,
             email: "", // Not cached
@@ -74,18 +67,14 @@ extension CachedPost {
             displayName: userDisplayName,
             bio: nil,
             avatarURL: userAvatarURL,
-            coverURL: nil,
             location: nil,
-            locationPrecision: .approximate,
             isVerified: false,
-            isOfficial: false,
             role: .user,
             privacySettings: PrivacySettings.default,
             createdAt: createdAt,
-            updatedAt: updatedAt,
-            lastActiveAt: nil
+            updatedAt: updatedAt
         )
-        
+
         return Post(
             id: id,
             user: user,
@@ -96,10 +85,8 @@ extension CachedPost {
             address: nil,
             category: .other,
             visibility: PostVisibility(rawValue: visibility) ?? .public,
-            isEmergency: false,
-            emergencyLevel: emergencyLevel.flatMap { EmergencyLevel(rawValue: $0) },
-            trustScore: trustScore,
-            mediaFiles: mediaFiles,
+            isUrgent: emergencyLevel != nil,
+            isVerified: false,
             likeCount: Int(likeCount),
             commentCount: Int(commentCount),
             shareCount: Int(shareCount),

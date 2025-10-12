@@ -57,24 +57,24 @@ class PostMapAnnotationView: MKAnnotationView {
         // 背景円
         let circleView = UIView(frame: containerView.bounds)
         circleView.layer.cornerRadius = 20
-        circleView.backgroundColor = post.emergencyLevel != nil ? .systemRed : .systemBlue
+        circleView.backgroundColor = post.isUrgent ? .systemRed : .systemBlue
         containerView.addSubview(circleView)
-        
+
         // アイコン
         let iconImageView = UIImageView(frame: CGRect(x: 8, y: 8, width: 24, height: 24))
         iconImageView.contentMode = .scaleAspectFit
         iconImageView.tintColor = .white
-        
-        if post.emergencyLevel != nil {
+
+        if post.isUrgent {
             iconImageView.image = UIImage(systemName: "exclamationmark.triangle.fill")
         } else {
             iconImageView.image = UIImage(systemName: "newspaper.fill")
         }
-        
+
         containerView.addSubview(iconImageView)
-        
-        // 信頼スコアインジケータ
-        if post.trustScore >= 0.8 {
+
+        // 信頼スコアインジケータ (trustScoreは削除されたため、isVerifiedで代用)
+        if post.isVerified {
             let badgeView = UIView(frame: CGRect(x: 28, y: 0, width: 12, height: 12))
             badgeView.layer.cornerRadius = 6
             badgeView.backgroundColor = .systemGreen
@@ -148,36 +148,38 @@ struct PostCalloutView: View {
                 .fixedSize(horizontal: false, vertical: true)
             
             // 緊急度表示
-            if let emergencyLevel = post.emergencyLevel {
+            if post.isUrgent {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.red)
-                    Text("緊急度: \(emergencyLevel.displayName)")
+                    Text("緊急度: 緊急")
                         .font(.caption2)
                         .foregroundColor(.red)
                 }
             }
-            
+
             // エンゲージメント情報
             HStack {
                 Label("\(post.likeCount)", systemImage: "heart.fill")
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                
+
                 Label("\(post.commentCount)", systemImage: "bubble.fill")
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                
+
                 Spacer()
-                
-                // 信頼スコア
-                HStack(spacing: 2) {
-                    Image(systemName: "shield.fill")
-                        .foregroundColor(trustScoreColor)
-                    Text(String(format: "%.0f%%", post.trustScore * 100))
-                        .foregroundColor(trustScoreColor)
+
+                // 認証バッジ (trustScoreの代わりにisVerifiedを使用)
+                if post.isVerified {
+                    HStack(spacing: 2) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .foregroundColor(.green)
+                        Text("認証済み")
+                            .foregroundColor(.green)
+                    }
+                    .font(.caption2)
                 }
-                .font(.caption2)
             }
         }
         .padding(12)
@@ -185,16 +187,7 @@ struct PostCalloutView: View {
         .background(Color(.systemBackground))
         .cornerRadius(10)
     }
-    
-    private var trustScoreColor: Color {
-        if post.trustScore >= 0.8 {
-            return .green
-        } else if post.trustScore >= 0.5 {
-            return .orange
-        } else {
-            return .red
-        }
-    }
+
 }
 
 // MARK: - Cluster Annotation View
@@ -254,7 +247,7 @@ class PostClusterAnnotationView: MKAnnotationView {
         
         // 緊急投稿が含まれているかチェック
         let hasEmergency = cluster.memberAnnotations.contains { annotation in
-            (annotation as? PostAnnotation)?.post.emergencyLevel != nil
+            (annotation as? PostAnnotation)?.post.isUrgent == true
         }
         
         if hasEmergency {

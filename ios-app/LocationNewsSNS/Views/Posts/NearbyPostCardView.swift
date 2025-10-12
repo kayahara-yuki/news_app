@@ -20,10 +20,10 @@ struct NearbyPostCardView: View {
                 // 投稿内容
                 contentSection
 
-                // 画像（もしあれば）
-                if let imageUrl = post.mediaUrls?.first {
-                    imageSection(imageUrl: imageUrl)
-                }
+                // 画像（もしあれば）- mediaUrlsは削除されたためコメントアウト
+                // if let imageUrl = post.mediaUrls?.first {
+                //     imageSection(imageUrl: imageUrl)
+                // }
 
                 // 位置情報とカテゴリ
                 locationCategorySection
@@ -68,18 +68,18 @@ struct NearbyPostCardView: View {
             Spacer()
 
             // 緊急度バッジ
-            if let emergency = post.emergencyLevel {
+            if post.isUrgent {
                 HStack(spacing: 4) {
-                    Image(systemName: emergency.iconName)
+                    Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11))
-                    Text(emergency.displayName)
+                    Text("緊急")
                         .font(.system(size: 10))
                         .fontWeight(.medium)
                 }
                 .foregroundColor(.white)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(emergency.color)
+                .background(Color.red)
                 .cornerRadius(6)
             }
         }

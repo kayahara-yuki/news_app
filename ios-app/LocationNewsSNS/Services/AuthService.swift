@@ -63,14 +63,10 @@ class AuthService: ObservableObject, AuthServiceProtocol {
     private func checkExistingSession() async {
         isLoading = true
         defer { isLoading = false }
-        
+
         do {
             let session = try await supabase.auth.session
-            if session != nil {
-                await handleSignIn(session: session)
-            } else {
-                await handleSignOut()
-            }
+            await handleSignIn(session: session)
         } catch {
             print("既存セッションの確認エラー: \(error)")
             await handleSignOut()
@@ -78,14 +74,9 @@ class AuthService: ObservableObject, AuthServiceProtocol {
     }
     
     private func handleSignIn(session: Session) async {
-        do {
-            await fetchUserProfile(userID: session.user.id)
-            isAuthenticated = true
-            errorMessage = nil
-        } catch {
-            print("ユーザープロフィール取得エラー: \(error)")
-            errorMessage = "ユーザー情報の取得に失敗しました"
-        }
+        await fetchUserProfile(userID: session.user.id)
+        isAuthenticated = true
+        errorMessage = nil
     }
     
     private func handleSignOut() async {
@@ -196,23 +187,19 @@ class AuthService: ObservableObject, AuthServiceProtocol {
             displayName: "Test User",
             bio: nil,
             avatarURL: nil,
-            coverURL: nil,
             location: nil,
-            locationPrecision: .approximate,
             isVerified: false,
-            isOfficial: false,
             role: .user,
             privacySettings: PrivacySettings.default,
             createdAt: Date(),
-            updatedAt: Date(),
-            lastActiveAt: nil
+            updatedAt: Date()
         )
     }
     
     private func createUserProfile(userID: UUID, email: String, username: String, displayName: String?) async {
         // プロフィール作成は後で実装
         print("プロフィール作成: \(email)")
-        
+
         let profile = UserProfile(
             id: userID,
             email: email,
@@ -220,60 +207,46 @@ class AuthService: ObservableObject, AuthServiceProtocol {
             displayName: displayName,
             bio: nil,
             avatarURL: nil,
-            coverURL: nil,
             location: nil,
-            locationPrecision: .approximate,
             isVerified: false,
-            isOfficial: false,
             role: .user,
             privacySettings: PrivacySettings.default,
             createdAt: Date(),
-            updatedAt: Date(),
-            lastActiveAt: nil
+            updatedAt: Date()
         )
-        
+
         currentUser = profile
     }
     
     /// プロフィール更新
     func updateProfile(displayName: String?, bio: String?, location: String?) async {
         guard let currentUser = currentUser else { return }
-        
+
         isLoading = true
         defer { isLoading = false }
-        
-        do {
-            // プロフィール更新は後で実装
-            print("プロフィール更新: \(displayName ?? "")")
-            
-            // TODO: Supabase APIで更新
-            
-            // ローカルのユーザー情報を更新
-            let updatedUser = UserProfile(
-                id: currentUser.id,
-                email: currentUser.email,
-                username: currentUser.username,
-                displayName: displayName,
-                bio: bio,
-                avatarURL: currentUser.avatarURL,
-                coverURL: currentUser.coverURL,
-                location: location,
-                locationPrecision: currentUser.locationPrecision,
-                isVerified: currentUser.isVerified,
-                isOfficial: currentUser.isOfficial,
-                role: currentUser.role,
-                privacySettings: currentUser.privacySettings,
-                createdAt: currentUser.createdAt,
-                updatedAt: Date(),
-                lastActiveAt: currentUser.lastActiveAt
-            )
-            
-            self.currentUser = updatedUser
-            
-        } catch {
-            print("プロフィール更新エラー: \(error)")
-            errorMessage = "プロフィールの更新に失敗しました"
-        }
+
+        // プロフィール更新は後で実装
+        print("プロフィール更新: \(displayName ?? "")")
+
+        // TODO: Supabase APIで更新
+
+        // ローカルのユーザー情報を更新
+        let updatedUser = UserProfile(
+            id: currentUser.id,
+            email: currentUser.email,
+            username: currentUser.username,
+            displayName: displayName,
+            bio: bio,
+            avatarURL: currentUser.avatarURL,
+            location: location,
+            isVerified: currentUser.isVerified,
+            role: currentUser.role,
+            privacySettings: currentUser.privacySettings,
+            createdAt: currentUser.createdAt,
+            updatedAt: Date()
+        )
+
+        self.currentUser = updatedUser
     }
 }
 

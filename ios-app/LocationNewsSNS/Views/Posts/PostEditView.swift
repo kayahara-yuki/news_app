@@ -46,9 +46,9 @@ struct PostEditView: View {
         self._locationName = State(initialValue: "") // TODO: 投稿から位置名を取得
         self._visibility = State(initialValue: post.visibility)
         self._allowComments = State(initialValue: true) // デフォルトでコメント許可
-        self._emergencyLevel = State(initialValue: post.emergencyLevel)
+        self._emergencyLevel = State(initialValue: nil) // emergencyLevelは削除されたためnil
         self._tags = State(initialValue: Set()) // TODO: Post モデルにtagsプロパティを追加
-        self._existingMediaFiles = State(initialValue: post.mediaFiles)
+        self._existingMediaFiles = State(initialValue: []) // mediaFilesは削除されたため空配列
     }
     
     var body: some View {
@@ -459,9 +459,8 @@ struct PostEditView: View {
                     selectedLocation?.latitude != post.latitude ||
                     selectedLocation?.longitude != post.longitude ||
                     visibility != post.visibility ||
-                    emergencyLevel != post.emergencyLevel ||
-                    !selectedImages.isEmpty ||
-                    existingMediaFiles.count != post.mediaFiles.count
+                    !selectedImages.isEmpty
+                    // emergencyLevelとmediaFilesは削除されたため比較から除外
     }
     
     private func loadSelectedPhotos(_ items: [PhotosPickerItem]) {
@@ -586,16 +585,12 @@ struct ExistingMediaGrid: View {
             displayName: "Test User",
             bio: nil,
             avatarURL: nil,
-            coverURL: nil,
             location: nil,
-            locationPrecision: .approximate,
             isVerified: false,
-            isOfficial: false,
             role: .user,
             privacySettings: PrivacySettings.default,
             createdAt: Date(),
-            updatedAt: Date(),
-            lastActiveAt: nil
+            updatedAt: Date()
         ),
         content: "Test post content for editing",
         url: nil,
@@ -604,10 +599,8 @@ struct ExistingMediaGrid: View {
         address: "東京都",
         category: .other,
         visibility: .public,
-        isEmergency: false,
-        emergencyLevel: nil,
-        trustScore: 0.8,
-        mediaFiles: [],
+        isUrgent: false,
+        isVerified: false,
         likeCount: 5,
         commentCount: 2,
         shareCount: 1,

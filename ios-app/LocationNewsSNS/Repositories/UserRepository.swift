@@ -234,13 +234,13 @@ struct UserRequest: Codable {
         self.displayName = profile.displayName
         self.bio = profile.bio
         self.avatarURL = profile.avatarURL
-        self.coverURL = profile.coverURL
+        self.coverURL = nil // coverURLはUserProfileから削除された
         self.location = profile.location
-        self.locationPrecision = profile.locationPrecision.rawValue
+        self.locationPrecision = profile.privacySettings?.locationPrecision ?? "city"
         self.isVerified = profile.isVerified
         self.isOfficial = profile.isOfficial
         self.role = profile.role.rawValue
-        
+
         // プライバシー設定をエンコード
         if let settings = profile.privacySettings {
             do {
@@ -322,16 +322,12 @@ struct UserResponse: Codable {
             displayName: displayName,
             bio: bio,
             avatarURL: avatarURL,
-            coverURL: coverURL,
             location: location,
-            locationPrecision: LocationPrecision(rawValue: locationPrecision) ?? .approximate,
             isVerified: isVerified,
-            isOfficial: isOfficial,
             role: UserRole(rawValue: role) ?? .user,
             privacySettings: privacySettings,
             createdAt: createdDate,
-            updatedAt: updatedDate,
-            lastActiveAt: lastActiveDate
+            updatedAt: updatedDate
         )
     }
 }

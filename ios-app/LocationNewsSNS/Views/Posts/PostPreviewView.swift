@@ -441,8 +441,6 @@ extension PostVisibility {
             return .green
         case .followers:
             return .blue
-        case .area:
-            return .purple
         case .private:
             return .orange
         }
@@ -454,8 +452,6 @@ extension PostVisibility {
             return "globe"
         case .followers:
             return "person.2"
-        case .area:
-            return "mappin.circle"
         case .private:
             return "lock"
         }
@@ -467,8 +463,6 @@ extension PostVisibility {
             return "全体公開"
         case .followers:
             return "フォロワーのみ"
-        case .area:
-            return "地域限定"
         case .private:
             return "非公開"
         }

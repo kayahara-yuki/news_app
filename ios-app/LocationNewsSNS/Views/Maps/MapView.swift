@@ -34,7 +34,7 @@ struct MapView: UIViewRepresentable {
                 
                 if let markerView = view as? MKMarkerAnnotationView {
                     markerView.glyphImage = UIImage(systemName: "newspaper.fill")
-                    markerView.markerTintColor = postAnnotation.post.emergencyLevel != nil ? .red : .blue
+                    markerView.markerTintColor = postAnnotation.post.isUrgent ? .red : .blue
                     markerView.titleVisibility = .adaptive
                 }
                 

@@ -14,10 +14,8 @@ struct Post: Codable, Identifiable {
     let address: String?
     let category: PostCategory
     let visibility: PostVisibility
-    let isEmergency: Bool
-    let emergencyLevel: EmergencyLevel?
-    let trustScore: Double
-    let mediaFiles: [MediaFile]
+    let isUrgent: Bool
+    let isVerified: Bool
     let likeCount: Int
     let commentCount: Int
     let shareCount: Int
@@ -26,7 +24,6 @@ struct Post: Codable, Identifiable {
 
     // カルーセル表示用のプロパティ
     var userName: String? { user.displayName ?? user.username }
-    var mediaUrls: [String]? { mediaFiles.isEmpty ? nil : mediaFiles.map { $0.url } }
     var distance: Double? = nil // 現在位置からの距離（メートル）
 
     enum CodingKeys: String, CodingKey {
@@ -39,10 +36,8 @@ struct Post: Codable, Identifiable {
         case address
         case category
         case visibility
-        case isEmergency = "is_emergency"
-        case emergencyLevel = "emergency_level"
-        case trustScore = "trust_score"
-        case mediaFiles = "media_files"
+        case isUrgent = "is_urgent"
+        case isVerified = "is_verified"
         case likeCount = "like_count"
         case commentCount = "comment_count"
         case shareCount = "share_count"
@@ -54,28 +49,24 @@ struct Post: Codable, Identifiable {
 /// 投稿カテゴリ
 enum PostCategory: String, Codable, CaseIterable {
     case news = "news"                 // ニュース
+    case event = "event"               // イベント
+    case emergency = "emergency"       // 緊急情報
     case traffic = "traffic"           // 交通情報
     case weather = "weather"           // 天気・気象
-    case crime = "crime"               // 犯罪・治安
-    case emergency = "emergency"       // 緊急情報
-    case community = "community"       // 地域情報
+    case social = "social"             // ソーシャル
     case business = "business"         // 店舗・ビジネス
-    case sports = "sports"             // スポーツ
-    case entertainment = "entertainment" // エンターテイメント
     case other = "other"               // その他
     
     /// カテゴリの表示名
     var displayName: String {
         switch self {
         case .news: return "ニュース"
+        case .event: return "イベント"
+        case .emergency: return "緊急情報"
         case .traffic: return "交通情報"
         case .weather: return "天気・気象"
-        case .crime: return "犯罪・治安"
-        case .emergency: return "緊急情報"
-        case .community: return "地域情報"
+        case .social: return "ソーシャル"
         case .business: return "店舗・ビジネス"
-        case .sports: return "スポーツ"
-        case .entertainment: return "エンターテイメント"
         case .other: return "その他"
         }
     }
@@ -84,14 +75,12 @@ enum PostCategory: String, Codable, CaseIterable {
     var iconName: String {
         switch self {
         case .news: return "newspaper"
+        case .event: return "calendar"
+        case .emergency: return "exclamationmark.triangle"
         case .traffic: return "car"
         case .weather: return "cloud.sun"
-        case .crime: return "shield.lefthalf.filled"
-        case .emergency: return "exclamationmark.triangle"
-        case .community: return "building.2"
+        case .social: return "person.2"
         case .business: return "storefront"
-        case .sports: return "sportscourt"
-        case .entertainment: return "party.popper"
         case .other: return "ellipsis.circle"
         }
     }
@@ -101,7 +90,6 @@ enum PostCategory: String, Codable, CaseIterable {
 enum PostVisibility: String, Codable, CaseIterable {
     case `public` = "public"    // 全体公開
     case followers = "followers"  // フォロワーのみ
-    case area = "area"           // 地域限定
     case `private` = "private"   // 非公開
 }
 
@@ -163,9 +151,9 @@ extension Post {
         return CLLocation(latitude: latitude, longitude: longitude)
     }
 
-    /// 緊急投稿かどうか
-    var isUrgent: Bool {
-        return isEmergency || category == .emergency
+    /// 緊急投稿かどうか（互換性のため残す）
+    var isEmergency: Bool {
+        return isUrgent || category == .emergency
     }
 
     /// 投稿の経過時間を表示用文字列で取得
@@ -191,8 +179,4 @@ extension Post {
         return hasValidLocation
     }
 
-    /// 検証済み投稿かどうか（信頼スコアが0.7以上）
-    var isVerified: Bool {
-        return trustScore >= 0.7
-    }
 }

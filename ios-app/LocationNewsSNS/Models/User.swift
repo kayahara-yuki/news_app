@@ -11,16 +11,12 @@ struct UserProfile: Codable, Identifiable {
     let displayName: String?
     let bio: String?
     let avatarURL: String?
-    let coverURL: String?
     let location: String?
-    let locationPrecision: LocationPrecision
     let isVerified: Bool
-    let isOfficial: Bool
     let role: UserRole
     let privacySettings: PrivacySettings?
     let createdAt: Date
     let updatedAt: Date
-    let lastActiveAt: Date?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -29,16 +25,12 @@ struct UserProfile: Codable, Identifiable {
         case displayName = "display_name"
         case bio
         case avatarURL = "avatar_url"
-        case coverURL = "cover_url"
         case location
-        case locationPrecision = "location_precision"
         case isVerified = "is_verified"
-        case isOfficial = "is_official"
         case role
         case privacySettings = "privacy_settings"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
-        case lastActiveAt = "last_active_at"
     }
 }
 
@@ -53,29 +45,22 @@ enum UserRole: String, Codable, CaseIterable {
 /// プライバシー設定
 struct PrivacySettings: Codable {
     let locationSharing: Bool
-    let locationPrecision: LocationPrecision
-    let profileVisibility: ProfileVisibility
+    let locationPrecision: String
+    let profileVisibility: String
     let emergencyOverride: Bool
-    let dataRetention: DataRetentionSettings
-    
+
     enum CodingKeys: String, CodingKey {
-        case locationSharing = "location_sharing"
-        case locationPrecision = "location_precision"
-        case profileVisibility = "profile_visibility"
-        case emergencyOverride = "emergency_override"
-        case dataRetention = "data_retention"
+        case locationSharing = "locationSharing"
+        case locationPrecision = "locationPrecision"
+        case profileVisibility = "profileVisibility"
+        case emergencyOverride = "emergencyOverride"
     }
-    
+
     static let `default` = PrivacySettings(
         locationSharing: true,
-        locationPrecision: .approximate,
-        profileVisibility: .publicProfile,
-        emergencyOverride: true,
-        dataRetention: DataRetentionSettings(
-            autoDeletePosts: false,
-            retentionDays: 365,
-            deleteLocationHistory: false
-        )
+        locationPrecision: "city",
+        profileVisibility: "public",
+        emergencyOverride: true
     )
 }
 
@@ -135,7 +120,7 @@ extension UserProfile {
     }
     
     /// 公式アカウントかどうか
-    var isOfficialAccount: Bool {
+    var isOfficial: Bool {
         return role == .official || role == .admin
     }
     

@@ -134,9 +134,10 @@ struct CarouselPostCardView: View {
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
-                // 画像セクション（もし画像があれば）
-                if let imageUrl = post.mediaUrls?.first {
-                    AsyncImage(url: URL(string: imageUrl)) { phase in
+                // 画像セクション（もし画像があれば）- mediaUrlsは削除されたためコメントアウト
+                // if let imageUrl = post.mediaUrls?.first {
+                if false { // 画像表示は将来実装
+                    AsyncImage(url: URL(string: "")) { phase in
                         switch phase {
                         case .empty:
                             Rectangle()
@@ -182,17 +183,17 @@ struct CarouselPostCardView: View {
                         Spacer()
 
                         // 緊急度バッジ
-                        if let emergency = post.emergencyLevel {
+                        if post.isUrgent {
                             HStack(spacing: 2) {
-                                Image(systemName: emergency.iconName)
+                                Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.system(size: 10))
-                                Text(emergency.carouselDisplayName)
+                                Text("緊急")
                                     .font(.system(size: 9))
                             }
                             .foregroundColor(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(emergency.color)
+                            .background(Color.red)
                             .cornerRadius(4)
                         }
                     }

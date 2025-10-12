@@ -7,8 +7,8 @@ class SupabaseConfig {
     
     // MARK: - Supabase設定
     // 注意: 本番環境では環境変数やplistファイルから読み込むこと
-    private let supabaseURL = "https://your-project-id.supabase.co"
-    private let supabaseAnonKey = "your-anon-key-here"
+    private let supabaseURL = "https://ikjxfoyfeliiovbwelyx.supabase.co"
+    private let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlranhmb3lmZWxpaW92YndlbHl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMTI5NDUsImV4cCI6MjA3NTU4ODk0NX0.E61qFPidet3gHJpqaBLeih2atXqx5LDc9zv5onEeM30"
     
     /// Supabaseクライアントのインスタンス
     lazy var client: SupabaseClient = {

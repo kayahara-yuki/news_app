@@ -42,11 +42,11 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.distanceFilter = 10 // 10m移動したら更新
-        
+
         // バックグラウンド位置情報の設定（必要に応じて）
         // locationManager.allowsBackgroundLocationUpdates = true
-        
-        authorizationStatus = locationManager.authorizationStatus
+
+        // 認証ステータスはデリゲートメソッド (locationManagerDidChangeAuthorization) で更新される
         isLocationEnabled = CLLocationManager.locationServicesEnabled()
     }
     

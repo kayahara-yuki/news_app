@@ -45,22 +45,20 @@ class LocationPrivacyService: ObservableObject {
     func updateLocationPrecision(_ precision: LocationPrecision) {
         privacySettings = PrivacySettings(
             locationSharing: privacySettings.locationSharing,
-            locationPrecision: precision,
+            locationPrecision: precision.rawValue,
             profileVisibility: privacySettings.profileVisibility,
-            emergencyOverride: privacySettings.emergencyOverride,
-            dataRetention: privacySettings.dataRetention
+            emergencyOverride: privacySettings.emergencyOverride
         )
         savePrivacySettings()
     }
-    
+
     /// 位置情報共有設定を更新
     func updateLocationSharing(_ enabled: Bool) {
         privacySettings = PrivacySettings(
             locationSharing: enabled,
             locationPrecision: privacySettings.locationPrecision,
             profileVisibility: privacySettings.profileVisibility,
-            emergencyOverride: privacySettings.emergencyOverride,
-            dataRetention: privacySettings.dataRetention
+            emergencyOverride: privacySettings.emergencyOverride
         )
         savePrivacySettings()
     }
@@ -73,19 +71,21 @@ class LocationPrivacyService: ObservableObject {
             // 位置情報共有が無効の場合はデフォルト位置を返す
             return CLLocationCoordinate2D(latitude: 35.6762, longitude: 139.6503) // 東京駅
         }
-        
+
         // 緊急モードの場合は正確な位置を返す
         if isEmergencyMode && privacySettings.emergencyOverride {
             return coordinate
         }
-        
+
         switch privacySettings.locationPrecision {
-        case .exact:
+        case "exact":
             return coordinate
-        case .approximate:
+        case "approximate":
             return addNoise(to: coordinate, radius: 100) // 100m以内のノイズ
-        case .areaOnly:
+        case "area_only":
             return roundToArea(location: coordinate, gridSize: 1000) // 1km四方に丸める
+        default:
+            return addNoise(to: coordinate, radius: 100) // デフォルトはapproximate
         }
     }
     
@@ -174,22 +174,21 @@ class LocationPrivacyService: ObservableObject {
     }
     
     // MARK: - データ保持管理
-    
+
     /// 古い位置データを削除
     func cleanupOldLocationData() async {
-        let retentionDays = privacySettings.dataRetention.retentionDays
+        // データ保持設定はPrivacySettingsから削除されたため、デフォルト30日で実装
+        let retentionDays = 30
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
-        
+
         // 実際の実装では、データベースから古いレコードを削除
         print("位置データのクリーンアップ: \(cutoffDate)以前のデータを削除")
     }
-    
+
     /// 位置履歴を削除
     func deleteLocationHistory() async {
-        if privacySettings.dataRetention.deleteLocationHistory {
-            // 実際の実装では、すべての位置履歴を削除
-            print("位置履歴を削除しました")
-        }
+        // 実際の実装では、すべての位置履歴を削除
+        print("位置履歴を削除しました")
     }
     
     // MARK: - プライバシー分析
