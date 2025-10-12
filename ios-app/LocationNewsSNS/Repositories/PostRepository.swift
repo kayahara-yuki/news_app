@@ -27,23 +27,39 @@ protocol PostRepositoryProtocol {
 
 class PostRepository: PostRepositoryProtocol {
     private let supabase = SupabaseConfig.shared.client
-    
-    func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double) async throws -> [Post] {
-        // PostGISを使用した近隣検索
-        // TODO: RPC関数を使用するためには、Supabaseで nearby_posts 関数を作成する必要があります
-        // 現時点では通常のクエリで代替します
-        let response: [PostResponse] = try await supabase
-            .from("posts")
-            .select("""
-                *,
-                users!posts_user_id_fkey(id, username, display_name, avatar_url, is_verified),
-                post_media(id, media_type, file_url, thumbnail_url)
-            """)
-            .order("created_at", ascending: false)
+
+    nonisolated func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double) async throws -> [Post] {
+        print("🗄️ [PostRepository] fetchNearbyPosts - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
+        // PostGIS nearby_posts_with_user RPC関数を使用した近隣検索
+        // radiusはすでにメートル単位で渡されているので、そのまま使用
+        let radiusMeters = Int(radius)
+
+        // RPC関数はINTEGER型を期待。単純なCodable structを使用
+        struct RPCParams: Codable {
+            var lat: Double
+            var lng: Double
+            var radius_meters: Int
+            var max_results: Int
+        }
+
+        let params = RPCParams(
+            lat: latitude,
+            lng: longitude,
+            radius_meters: radiusMeters,
+            max_results: 50
+        )
+
+        print("🗄️ [PostRepository] RPC呼び出し - params: \(params)")
+
+        let response: [NearbyPostResponse] = try await supabase
+            .rpc("nearby_posts_with_user", params: params)
             .execute()
             .value
 
-        return try response.map { try $0.toPost() }
+        print("✅ [PostRepository] RPC レスポンス: \(response.count) 件")
+        let posts = try response.map { try $0.toPost() }
+        print("✅ [PostRepository] Post変換完了: \(posts.count) 件")
+        return posts
     }
     
     func getPost(id: UUID) async throws -> Post {
@@ -51,14 +67,13 @@ class PostRepository: PostRepositoryProtocol {
             .from("posts")
             .select("""
                 *,
-                users!posts_user_id_fkey(id, username, display_name, avatar_url, is_verified),
-                post_media(id, media_type, file_url, thumbnail_url)
+                users!posts_user_id_fkey(id, username, display_name, avatar_url, is_verified, role, privacy_settings, email, bio, location, created_at, updated_at)
             """)
             .eq("id", value: id)
             .single()
             .execute()
             .value
-        
+
         return try response.toPost()
     }
     
@@ -70,8 +85,7 @@ class PostRepository: PostRepositoryProtocol {
             .insert(postRequest)
             .select("""
                 *,
-                users!posts_user_id_fkey(id, username, display_name, avatar_url, is_verified),
-                post_media(id, media_type, file_url, thumbnail_url)
+                users!posts_user_id_fkey(id, username, display_name, avatar_url, is_verified, role, privacy_settings, email, bio, location, created_at, updated_at)
             """)
             .single()
             .execute()
@@ -114,18 +128,17 @@ class PostRepository: PostRepositoryProtocol {
     func likePost(id: UUID) async throws {
         // TODO: 現在のユーザーIDを取得
         let userID = UUID() // 仮のID
-        
+
         let likeRequest = PostLikeRequest(
             postID: id,
-            userID: userID,
-            reactionType: "like"
+            userID: userID
         )
-        
+
         try await supabase
-            .from("post_likes")
+            .from("likes")
             .insert(likeRequest)
             .execute()
-        
+
         // いいね数を更新
         try await supabase
             .from("posts")
@@ -137,14 +150,14 @@ class PostRepository: PostRepositoryProtocol {
     func unlikePost(id: UUID) async throws {
         // TODO: 現在のユーザーIDを取得
         let userID = UUID() // 仮のID
-        
+
         try await supabase
-            .from("post_likes")
+            .from("likes")
             .delete()
             .eq("post_id", value: id)
             .eq("user_id", value: userID)
             .execute()
-        
+
         // いいね数を更新
         try await supabase
             .from("posts")
@@ -231,42 +244,42 @@ class PostRepository: PostRepositoryProtocol {
     
     func hasUserLikedPost(id: UUID, userID: UUID) async throws -> Bool {
         let response: [PostLikeResponse] = try await supabase
-            .from("post_likes")
+            .from("likes")
             .select("id")
             .eq("post_id", value: id)
             .eq("user_id", value: userID)
             .limit(1)
             .execute()
             .value
-        
+
         return !response.isEmpty
     }
     
     func getPostLikes(id: UUID, limit: Int, offset: Int) async throws -> [UserProfile] {
         let response: [PostLikeResponse] = try await supabase
-            .from("post_likes")
-            .select("users!post_likes_user_id_fkey(*)")
+            .from("likes")
+            .select("users!likes_user_id_fkey(*)")
             .eq("post_id", value: id)
             .range(from: offset, to: offset + limit - 1)
             .execute()
             .value
-        
+
         return try response.compactMap { try $0.user?.toUserProfile() }
     }
     
     func getPostComments(id: UUID, limit: Int, offset: Int) async throws -> [Comment] {
         let response: [CommentResponse] = try await supabase
-            .from("post_comments")
+            .from("comments")
             .select("""
                 *,
-                users!post_comments_user_id_fkey(id, username, display_name, avatar_url, is_verified)
+                users!comments_user_id_fkey(id, username, display_name, avatar_url, is_verified, role, privacy_settings, email, bio, location, created_at, updated_at)
             """)
             .eq("post_id", value: id)
             .order("created_at", ascending: true)
             .range(from: offset, to: offset + limit - 1)
             .execute()
             .value
-        
+
         return try response.map { try $0.toComment() }
     }
     
@@ -276,25 +289,25 @@ class PostRepository: PostRepositoryProtocol {
             userID: userID,
             content: content
         )
-        
+
         let response: CommentResponse = try await supabase
-            .from("post_comments")
+            .from("comments")
             .insert(commentRequest)
             .select("""
                 *,
-                users!post_comments_user_id_fkey(id, username, display_name, avatar_url, is_verified)
+                users!comments_user_id_fkey(id, username, display_name, avatar_url, is_verified, role, privacy_settings, email, bio, location, created_at, updated_at)
             """)
             .single()
             .execute()
             .value
-        
+
         // コメント数を更新
         try await supabase
             .from("posts")
             .update(["comment_count": "comment_count + 1"])
             .eq("id", value: postID)
             .execute()
-        
+
         return try response.toComment()
     }
     
@@ -342,124 +355,12 @@ struct PostRequest: Encodable {
     let userID: UUID?
     let content: String
     let url: String?
-    let location: String? // PostGISのGEOGRAPHY型
-    let address: [String: AnyEncodable]?
-    let category: String
-    let visibility: String
-    let isEmergency: Bool
-    let emergencyLevel: String?
-    let trustScore: Double
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userID = "user_id"
-        case content
-        case url
-        case location
-        case address
-        case category
-        case visibility
-        case isEmergency = "is_emergency"
-        case emergencyLevel = "emergency_level"
-        case trustScore = "trust_score"
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(id, forKey: .id)
-        try container.encodeIfPresent(userID, forKey: .userID)
-        try container.encode(content, forKey: .content)
-        try container.encodeIfPresent(url, forKey: .url)
-        try container.encodeIfPresent(location, forKey: .location)
-
-        if let address = address {
-            let addressDict = address.mapValues { $0 }
-            try container.encode(addressDict, forKey: .address)
-        }
-
-        try container.encode(category, forKey: .category)
-        try container.encode(visibility, forKey: .visibility)
-        try container.encode(isEmergency, forKey: .isEmergency)
-        try container.encodeIfPresent(emergencyLevel, forKey: .emergencyLevel)
-        try container.encode(trustScore, forKey: .trustScore)
-    }
-    
-    init(from request: CreatePostRequest) {
-        self.id = nil
-        self.userID = nil // TODO: 現在のユーザーIDを設定
-        self.content = request.content
-        self.url = nil // CreatePostRequestにはurl不要
-
-        // PostGIS用の位置情報フォーマット
-        if let lat = request.latitude, let lng = request.longitude {
-            self.location = "POINT(\(lng) \(lat))"
-        } else {
-            self.location = nil
-        }
-
-        // 住所情報をJSONBフォーマットに変換
-        if let locationName = request.locationName {
-            self.address = ["formatted": AnyEncodable(locationName)]
-        } else {
-            self.address = nil
-        }
-
-        // categoryはCreatePostRequestに存在しないため、デフォルト値を使用
-        self.category = "community"
-        self.visibility = request.visibility.rawValue
-        self.isEmergency = request.emergencyLevel != nil
-        self.emergencyLevel = request.emergencyLevel?.rawValue
-        self.trustScore = 0.5 // デフォルト値
-    }
-    
-    init(from post: Post) {
-        self.id = post.id
-        self.userID = post.user.id
-        self.content = post.content
-        self.url = post.url
-        
-        // PostGIS用の位置情報フォーマット
-        if let lat = post.latitude, let lng = post.longitude {
-            self.location = "POINT(\(lng) \(lat))"
-        } else {
-            self.location = nil
-        }
-        
-        // 住所情報をJSONBフォーマットに変換
-        if let address = post.address {
-            self.address = ["formatted": AnyEncodable(address)]
-        } else {
-            self.address = nil
-        }
-        
-        self.category = post.category.rawValue
-        self.visibility = post.visibility.rawValue
-        self.isEmergency = post.isEmergency
-        self.emergencyLevel = post.emergencyLevel?.rawValue
-        self.trustScore = post.trustScore
-    }
-}
-
-struct PostResponse: Decodable {
-    let id: UUID
-    let userID: UUID
-    let content: String
-    let url: String?
     let latitude: Double?
     let longitude: Double?
-    let address: [String: AnyDecodable]?
+    let address: String?
     let category: String
     let visibility: String
-    let isEmergency: Bool
-    let emergencyLevel: String?
-    let trustScore: Double
-    let likeCount: Int
-    let commentCount: Int
-    let shareCount: Int
-    let createdAt: String
-    let updatedAt: String
-    let user: UserResponse?
-    let postMedia: [PostMediaResponse]?
+    let isUrgent: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -471,16 +372,89 @@ struct PostResponse: Decodable {
         case address
         case category
         case visibility
-        case isEmergency = "is_emergency"
-        case emergencyLevel = "emergency_level"
-        case trustScore = "trust_score"
+        case isUrgent = "is_urgent"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(id, forKey: .id)
+        try container.encodeIfPresent(userID, forKey: .userID)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(url, forKey: .url)
+        try container.encodeIfPresent(latitude, forKey: .latitude)
+        try container.encodeIfPresent(longitude, forKey: .longitude)
+        try container.encodeIfPresent(address, forKey: .address)
+        try container.encode(category, forKey: .category)
+        try container.encode(visibility, forKey: .visibility)
+        try container.encode(isUrgent, forKey: .isUrgent)
+    }
+    
+    init(from request: CreatePostRequest) {
+        self.id = nil
+        self.userID = nil // TODO: 現在のユーザーIDを設定
+        self.content = request.content
+        self.url = nil // CreatePostRequestにはurl不要
+        self.latitude = request.latitude
+        self.longitude = request.longitude
+        self.address = request.locationName
+
+        // categoryはCreatePostRequestに存在しないため、デフォルト値を使用
+        self.category = "social"
+        self.visibility = request.visibility.rawValue
+        self.isUrgent = request.emergencyLevel != nil
+    }
+    
+    init(from post: Post) {
+        self.id = post.id
+        self.userID = post.user.id
+        self.content = post.content
+        self.url = post.url
+        self.latitude = post.latitude
+        self.longitude = post.longitude
+        self.address = post.address
+        self.category = post.category.rawValue
+        self.visibility = post.visibility.rawValue
+        self.isUrgent = post.isUrgent
+    }
+}
+
+struct PostResponse: Decodable {
+    let id: UUID
+    let userID: UUID
+    let content: String
+    let url: String?
+    let latitude: Double?
+    let longitude: Double?
+    let address: String?
+    let category: String
+    let visibility: String
+    let isUrgent: Bool
+    let isVerified: Bool
+    let likeCount: Int
+    let commentCount: Int
+    let shareCount: Int
+    let createdAt: String
+    let updatedAt: String
+    let user: UserResponse?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userID = "user_id"
+        case content
+        case url
+        case latitude
+        case longitude
+        case address
+        case category
+        case visibility
+        case isUrgent = "is_urgent"
+        case isVerified = "is_verified"
         case likeCount = "like_count"
         case commentCount = "comment_count"
         case shareCount = "share_count"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case user = "users"
-        case postMedia = "post_media"
     }
 
     init(from decoder: Decoder) throws {
@@ -491,48 +465,33 @@ struct PostResponse: Decodable {
         url = try container.decodeIfPresent(String.self, forKey: .url)
         latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
         longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
-        address = try container.decodeIfPresent([String: AnyDecodable].self, forKey: .address)
+        address = try container.decodeIfPresent(String.self, forKey: .address)
         category = try container.decode(String.self, forKey: .category)
         visibility = try container.decode(String.self, forKey: .visibility)
-        isEmergency = try container.decode(Bool.self, forKey: .isEmergency)
-        emergencyLevel = try container.decodeIfPresent(String.self, forKey: .emergencyLevel)
-        trustScore = try container.decode(Double.self, forKey: .trustScore)
+        isUrgent = try container.decode(Bool.self, forKey: .isUrgent)
+        isVerified = try container.decode(Bool.self, forKey: .isVerified)
         likeCount = try container.decode(Int.self, forKey: .likeCount)
         commentCount = try container.decode(Int.self, forKey: .commentCount)
         shareCount = try container.decode(Int.self, forKey: .shareCount)
         createdAt = try container.decode(String.self, forKey: .createdAt)
         updatedAt = try container.decode(String.self, forKey: .updatedAt)
         user = try container.decodeIfPresent(UserResponse.self, forKey: .user)
-        postMedia = try container.decodeIfPresent([PostMediaResponse].self, forKey: .postMedia)
     }
     
     func toPost() throws -> Post {
         let dateFormatter = ISO8601DateFormatter()
-        
+
         guard let createdDate = dateFormatter.date(from: createdAt),
               let updatedDate = dateFormatter.date(from: updatedAt) else {
             throw RepositoryError.invalidDateFormat
         }
-        
+
         guard let userResponse = user else {
             throw RepositoryError.decodingError
         }
-        
+
         let userProfile = try userResponse.toUserProfile()
-        
-        // 住所情報をデコード
-        let formattedAddress = address?["formatted"]?.value as? String
-        
-        // メディア情報をデコード
-        let mediaFiles = postMedia?.compactMap { media in
-            MediaFile(
-                id: media.id,
-                type: MediaType(rawValue: media.mediaType) ?? .image,
-                url: media.fileURL,
-                thumbnailURL: media.thumbnailURL
-            )
-        } ?? []
-        
+
         return Post(
             id: id,
             user: userProfile,
@@ -540,13 +499,11 @@ struct PostResponse: Decodable {
             url: url,
             latitude: latitude,
             longitude: longitude,
-            address: formattedAddress,
-            category: PostCategory(rawValue: category) ?? .community,
+            address: address,
+            category: PostCategory(rawValue: category) ?? .other,
             visibility: PostVisibility(rawValue: visibility) ?? .public,
-            isEmergency: isEmergency,
-            emergencyLevel: emergencyLevel.flatMap { EmergencyLevel(rawValue: $0) },
-            trustScore: trustScore,
-            mediaFiles: mediaFiles,
+            isUrgent: isUrgent,
+            isVerified: isVerified,
             likeCount: likeCount,
             commentCount: commentCount,
             shareCount: shareCount,
@@ -589,12 +546,10 @@ struct PostMediaResponse: Codable {
 struct PostLikeRequest: Codable {
     let postID: UUID
     let userID: UUID
-    let reactionType: String
-    
+
     enum CodingKeys: String, CodingKey {
         case postID = "post_id"
         case userID = "user_id"
-        case reactionType = "reaction_type"
     }
 }
 
@@ -602,15 +557,13 @@ struct PostLikeResponse: Codable {
     let id: UUID
     let postID: UUID
     let userID: UUID
-    let reactionType: String
     let createdAt: String
     let user: UserResponse?
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case postID = "post_id"
         case userID = "user_id"
-        case reactionType = "reaction_type"
         case createdAt = "created_at"
         case user = "users"
     }
@@ -686,6 +639,103 @@ struct CommentResponse: Codable {
             likesCount: likeCount,
             repliesCount: 0, // TODO: 返信機能実装時に対応
             isLikedByCurrentUser: false, // TODO: いいね状態取得機能実装時に対応
+            createdAt: createdDate,
+            updatedAt: updatedDate
+        )
+    }
+}
+
+// MARK: - Nearby Post Response (for RPC function)
+
+struct NearbyPostResponse: Decodable {
+    let id: UUID
+    let userID: UUID
+    let username: String
+    let displayName: String?
+    let avatarURL: String?
+    let isVerified: Bool
+    let userRole: String
+    let content: String
+    let url: String?
+    let latitude: Double?
+    let longitude: Double?
+    let address: String?
+    let category: String
+    let visibility: String
+    let isUrgent: Bool
+    let postIsVerified: Bool
+    let likeCount: Int
+    let commentCount: Int
+    let shareCount: Int
+    let createdAt: String
+    let updatedAt: String
+    let distanceMeters: Double
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userID = "user_id"
+        case username
+        case displayName = "display_name"
+        case avatarURL = "avatar_url"
+        case isVerified = "is_verified"
+        case userRole = "user_role"
+        case content
+        case url
+        case latitude
+        case longitude
+        case address
+        case category
+        case visibility
+        case isUrgent = "is_urgent"
+        case postIsVerified = "post_is_verified"
+        case likeCount = "like_count"
+        case commentCount = "comment_count"
+        case shareCount = "share_count"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case distanceMeters = "distance_meters"
+    }
+
+    func toPost() throws -> Post {
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        guard let createdDate = dateFormatter.date(from: createdAt),
+              let updatedDate = dateFormatter.date(from: updatedAt) else {
+            print("❌ [NearbyPostResponse] 日付パースエラー - createdAt: \(createdAt), updatedAt: \(updatedAt)")
+            throw RepositoryError.invalidDateFormat
+        }
+
+        let userProfile = UserProfile(
+            id: userID,
+            email: "", // RPC関数からはemailは返されない
+            username: username,
+            displayName: displayName,
+            bio: nil,
+            avatarURL: avatarURL,
+            location: nil,
+            isVerified: isVerified,
+            role: UserRole(rawValue: userRole) ?? .user,
+            privacySettings: nil,
+            createdAt: Date(), // RPC関数からは返されない
+            updatedAt: Date()  // RPC関数からは返されない
+        )
+
+        return Post(
+            id: id,
+            user: userProfile,
+            content: content,
+            url: url,
+            latitude: latitude,
+            longitude: longitude,
+            address: address,
+            category: PostCategory(rawValue: category) ?? .other,
+            visibility: PostVisibility(rawValue: visibility) ?? .public,
+            isUrgent: isUrgent,
+            isVerified: postIsVerified,
+            likeCount: likeCount,
+            commentCount: commentCount,
+            shareCount: shareCount,
             createdAt: createdDate,
             updatedAt: updatedDate
         )
