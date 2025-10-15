@@ -723,17 +723,17 @@ struct MapCircleOverlay: View {
             let radiusInPoints = radius * averageScale
 
             ZStack {
-                // 塗りつぶし
+                // 塗りつぶし（透明度を下げて視認性向上）
                 Circle()
-                    .fill(Color.blue.opacity(0.15))
+                    .fill(Color.blue.opacity(0.05))
                     .frame(
                         width: radiusInPoints * 2,
                         height: radiusInPoints * 2
                     )
 
-                // 境界線
+                // 境界線（より目立たせる）
                 Circle()
-                    .stroke(Color.blue.opacity(0.6), lineWidth: 3)
+                    .stroke(Color.blue.opacity(0.8), lineWidth: 2.5)
                     .frame(
                         width: radiusInPoints * 2,
                         height: radiusInPoints * 2
