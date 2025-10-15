@@ -25,8 +25,21 @@ protocol UserRepositoryProtocol {
 
 class UserRepository: UserRepositoryProtocol {
     private let supabase = SupabaseConfig.shared.client
-    
+
+    // パフォーマンス最適化: ユーザー情報キャッシュ
+    private let userCache = NSCache<NSString, CachedUser>()
+    private let cacheTTL: TimeInterval = 600 // 10分
+
     func getUser(id: UUID) async throws -> UserProfile {
+        let cacheKey = "user_\(id.uuidString)" as NSString
+
+        // キャッシュチェック
+        if let cached = userCache.object(forKey: cacheKey),
+           Date().timeIntervalSince(cached.timestamp) < cacheTTL {
+            return cached.user
+        }
+
+        // API呼び出し
         let response: UserResponse = try await supabase
             .from("users")
             .select()
@@ -34,11 +47,26 @@ class UserRepository: UserRepositoryProtocol {
             .single()
             .execute()
             .value
-        
-        return try response.toUserProfile()
+
+        let user = try response.toUserProfile()
+
+        // キャッシュに保存
+        let cachedUser = CachedUser(user: user, timestamp: Date())
+        userCache.setObject(cachedUser, forKey: cacheKey)
+
+        return user
     }
     
     func getUserByUsername(_ username: String) async throws -> UserProfile? {
+        let cacheKey = "user_username_\(username)" as NSString
+
+        // キャッシュチェック
+        if let cached = userCache.object(forKey: cacheKey),
+           Date().timeIntervalSince(cached.timestamp) < cacheTTL {
+            return cached.user
+        }
+
+        // API呼び出し
         let response: [UserResponse] = try await supabase
             .from("users")
             .select()
@@ -46,11 +74,28 @@ class UserRepository: UserRepositoryProtocol {
             .limit(1)
             .execute()
             .value
-        
-        return try response.first?.toUserProfile()
+
+        guard let user = try response.first?.toUserProfile() else {
+            return nil
+        }
+
+        // キャッシュに保存
+        let cachedUser = CachedUser(user: user, timestamp: Date())
+        userCache.setObject(cachedUser, forKey: cacheKey)
+
+        return user
     }
     
     func getUserByEmail(_ email: String) async throws -> UserProfile? {
+        let cacheKey = "user_email_\(email)" as NSString
+
+        // キャッシュチェック
+        if let cached = userCache.object(forKey: cacheKey),
+           Date().timeIntervalSince(cached.timestamp) < cacheTTL {
+            return cached.user
+        }
+
+        // API呼び出し
         let response: [UserResponse] = try await supabase
             .from("users")
             .select()
@@ -58,8 +103,16 @@ class UserRepository: UserRepositoryProtocol {
             .limit(1)
             .execute()
             .value
-        
-        return try response.first?.toUserProfile()
+
+        guard let user = try response.first?.toUserProfile() else {
+            return nil
+        }
+
+        // キャッシュに保存
+        let cachedUser = CachedUser(user: user, timestamp: Date())
+        userCache.setObject(cachedUser, forKey: cacheKey)
+
+        return user
     }
     
     func createUser(_ profile: UserProfile) async throws -> UserProfile {
@@ -452,5 +505,18 @@ enum RepositoryError: Error, LocalizedError {
         case .unknownError:
             return "不明なエラーが発生しました"
         }
+    }
+}
+
+// MARK: - Cache Models
+
+/// キャッシュされたユーザー情報
+class CachedUser {
+    let user: UserProfile
+    let timestamp: Date
+
+    init(user: UserProfile, timestamp: Date) {
+        self.user = user
+        self.timestamp = timestamp
     }
 }

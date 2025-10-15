@@ -9,7 +9,7 @@ import CoreLocation
 class RealtimeService: ObservableObject {
     @Published var isConnected = false
     @Published var connectionStatus: RealtimeConnectionStatus = .disconnected
-    @Published var activeSubscriptions: [String: RealtimeChannel] = [:]
+    @Published var activeSubscriptions: [String: RealtimeChannelV2] = [:]
     
     private let supabase = SupabaseConfig.shared.client
     private var cancellables = Set<AnyCancellable>()
@@ -49,24 +49,22 @@ class RealtimeService: ObservableObject {
         _ channelName: String,
         table: String? = nil,
         filter: String? = nil
-    ) -> RealtimeChannel {
+    ) async -> RealtimeChannelV2 {
         // 既存のサブスクリプションがある場合は返す
         if let existingChannel = activeSubscriptions[channelName] {
             return existingChannel
         }
-        
-        // 新しいチャンネルを作成
-        let channel = supabase.realtime.channel(channelName)
 
-        // TODO: Supabase Realtime API の型定義が必要
-        // リアルタイムイベント処理は一旦無効化
+        // 新しいチャンネルを作成（RealtimeV2を使用）
+        let channel = supabase.realtimeV2.channel(channelName)
 
         // チャンネルを購読
-        channel.subscribe { [weak self] status, error in
-            if let error = error {
-                print("Subscription error: \(error)")
-            }
-            self?.handleSubscriptionStatus(status, channelName: channelName)
+        do {
+            try await channel.subscribeWithError()
+            handleSubscriptionSuccess(channelName: channelName)
+        } catch {
+            print("Subscription error: \(error)")
+            handleSubscriptionError(channelName: channelName, error: error)
         }
 
         // アクティブなサブスクリプションに追加
@@ -119,26 +117,18 @@ class RealtimeService: ObservableObject {
     }
     */
 
-    private func handleSubscriptionStatus(_ status: RealtimeSubscribeStates, channelName: String) {
-        print("Realtime channel \(channelName) status: \(status)")
-        
-        switch status {
-        case .subscribed:
-            connectionStatus = .connected
-            isConnected = true
-            
-        case .timedOut, .channelError:
-            connectionStatus = .disconnected
-            isConnected = false
-            activeSubscriptions.removeValue(forKey: channelName)
-            
-        case .channelError:
-            connectionStatus = .error
-            attemptReconnection(channelName: channelName)
-            
-        default:
-            break
-        }
+    private func handleSubscriptionSuccess(channelName: String) {
+        print("Realtime channel \(channelName) subscribed successfully")
+        connectionStatus = .connected
+        isConnected = true
+    }
+
+    private func handleSubscriptionError(channelName: String, error: Error) {
+        print("Realtime channel \(channelName) subscription error: \(error)")
+        connectionStatus = .error
+        isConnected = false
+        activeSubscriptions.removeValue(forKey: channelName)
+        attemptReconnection(channelName: channelName)
     }
     
     // MARK: - Reconnection
@@ -146,18 +136,11 @@ class RealtimeService: ObservableObject {
     private func attemptReconnection(channelName: String) {
         Task {
             try? await Task.sleep(nanoseconds: UInt64(reconnectDelay * 1_000_000_000))
-            
-            if let channel = activeSubscriptions[channelName] {
-                print("Attempting to reconnect channel: \(channelName)")
-                
-                // 再購読を試みる
-                channel.subscribe { [weak self] status, error in
-                    if let error = error {
-                        print("Resubscription error: \(error)")
-                    }
-                    self?.handleSubscriptionStatus(status, channelName: channelName)
-                }
-            }
+
+            print("Attempting to reconnect channel: \(channelName)")
+
+            // チャンネルを再作成して再購読
+            let _ = await subscribeToChannel(channelName)
         }
     }
     
@@ -165,42 +148,42 @@ class RealtimeService: ObservableObject {
     
     /// プレゼンス機能を有効化（位置情報共有など）
     func enablePresence(
-        on channel: RealtimeChannel,
+        on channel: RealtimeChannelV2,
         userID: UUID,
         metadata: [String: Any] = [:]
     ) {
         Task {
-            var presence: [String: String] = ["user_id": userID.uuidString]
-            // metadataをString型に変換
+            var presence: [String: AnyJSON] = ["user_id": .string(userID.uuidString)]
+            // metadataをAnyJSON型に変換
             metadata.forEach { key, value in
-                presence[key] = String(describing: value)
+                presence[key] = .string(String(describing: value))
             }
 
-            await channel.track(presence)
+            try? await channel.track(state: presence)
         }
     }
     
     /// プレゼンス情報を更新
     func updatePresence(
-        on channel: RealtimeChannel,
+        on channel: RealtimeChannelV2,
         location: CLLocationCoordinate2D? = nil,
         status: String? = nil
     ) {
         Task {
-            var updates: [String: Any] = [:]
-            
+            var updates: [String: AnyJSON] = [:]
+
             if let location = location {
-                updates["latitude"] = location.latitude
-                updates["longitude"] = location.longitude
-                updates["last_updated"] = Date().iso8601String
+                updates["latitude"] = .double(location.latitude)
+                updates["longitude"] = .double(location.longitude)
+                updates["last_updated"] = .string(Date().iso8601String)
             }
-            
+
             if let status = status {
-                updates["status"] = status
+                updates["status"] = .string(status)
             }
-            
+
             if !updates.isEmpty {
-                await channel.track(updates)
+                try? await channel.track(state: updates)
             }
         }
     }
@@ -209,35 +192,31 @@ class RealtimeService: ObservableObject {
     
     /// メッセージをブロードキャスト
     func broadcast(
-        on channel: RealtimeChannel,
+        on channel: RealtimeChannelV2,
         event: String,
-        payload: [String: Any]
+        payload: [String: AnyJSON]
     ) {
         Task {
-            await channel.send(
-                type: .broadcast,
-                event: event,
-                payload: payload
-            )
+            try? await channel.broadcast(event: event, message: payload)
         }
     }
-    
+
     /// 位置情報をブロードキャスト
     func broadcastLocation(
-        on channel: RealtimeChannel,
+        on channel: RealtimeChannelV2,
         coordinate: CLLocationCoordinate2D,
         accuracy: Double,
-        additionalInfo: [String: Any] = [:]
+        additionalInfo: [String: AnyJSON] = [:]
     ) {
-        var payload: [String: Any] = [
-            "latitude": coordinate.latitude,
-            "longitude": coordinate.longitude,
-            "accuracy": accuracy,
-            "timestamp": Date().iso8601String
+        var payload: [String: AnyJSON] = [
+            "latitude": .double(coordinate.latitude),
+            "longitude": .double(coordinate.longitude),
+            "accuracy": .double(accuracy),
+            "timestamp": .string(Date().iso8601String)
         ]
-        
+
         additionalInfo.forEach { payload[$0.key] = $0.value }
-        
+
         broadcast(on: channel, event: "location_update", payload: payload)
     }
 }

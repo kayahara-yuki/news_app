@@ -5,19 +5,23 @@ import MapKit
 
 class PostMapAnnotationView: MKAnnotationView {
     static let reuseIdentifier = "PostMapAnnotation"
-    
+
+    // パフォーマンス最適化: ビュー要素を再利用
+    private var annotationImageView: UIView?
+    private var calloutHostingController: UIHostingController<PostCalloutView>?
+
     override var annotation: MKAnnotation? {
         didSet {
             guard let postAnnotation = annotation as? PostAnnotation else { return }
             configureView(for: postAnnotation)
         }
     }
-    
+
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
         setupView()
     }
-    
+
     required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
         setupView()
@@ -36,21 +40,75 @@ class PostMapAnnotationView: MKAnnotationView {
     }
     
     private func configureView(for postAnnotation: PostAnnotation) {
-        // カスタムイメージビューを作成
-        let imageView = createAnnotationImageView(for: postAnnotation.post)
-        
-        // 既存のサブビューを削除
-        subviews.forEach { $0.removeFromSuperview() }
-        
-        // 新しいイメージビューを追加
-        addSubview(imageView)
-        
-        // コールアウトビューの設定
-        if let calloutView = createCalloutView(for: postAnnotation.post) {
-            detailCalloutAccessoryView = calloutView
+        // パフォーマンス最適化: ビュー再利用
+        // 既存のビューがあれば更新、なければ新規作成
+
+        if let existingImageView = annotationImageView {
+            // 既存ビューを更新（削除せずに内容を変更）
+            updateAnnotationImageView(existingImageView, for: postAnnotation.post)
+        } else {
+            // 初回のみ新規作成
+            let imageView = createAnnotationImageView(for: postAnnotation.post)
+            annotationImageView = imageView
+            addSubview(imageView)
+        }
+
+        // コールアウトビューの再利用
+        if let existingController = calloutHostingController {
+            // SwiftUIビューの内容を更新
+            existingController.rootView = PostCalloutView(post: postAnnotation.post)
+        } else {
+            // 初回のみ新規作成
+            let controller = UIHostingController(rootView: PostCalloutView(post: postAnnotation.post))
+            controller.view.backgroundColor = .clear
+            calloutHostingController = controller
+            detailCalloutAccessoryView = controller.view
         }
     }
     
+    private func updateAnnotationImageView(_ containerView: UIView, for post: Post) {
+        // 既存のサブビューを更新（削除せずに再設定）
+        guard containerView.subviews.count >= 2 else {
+            // サブビューが不足している場合は再生成
+            if let annotationImageView = annotationImageView {
+                annotationImageView.removeFromSuperview()
+            }
+            let newView = createAnnotationImageView(for: post)
+            self.annotationImageView = newView
+            addSubview(newView)
+            return
+        }
+
+        // 背景円の色を更新
+        if let circleView = containerView.subviews.first {
+            circleView.backgroundColor = post.isUrgent ? .systemRed : .systemBlue
+        }
+
+        // アイコンを更新
+        if containerView.subviews.count > 1, let iconImageView = containerView.subviews[1] as? UIImageView {
+            iconImageView.image = post.isUrgent ?
+                UIImage(systemName: "exclamationmark.triangle.fill") :
+                UIImage(systemName: "newspaper.fill")
+        }
+
+        // 認証バッジの表示/非表示
+        if post.isVerified {
+            if containerView.subviews.count < 3 {
+                // バッジを追加
+                let badgeView = UIView(frame: CGRect(x: 28, y: 0, width: 12, height: 12))
+                badgeView.layer.cornerRadius = 6
+                badgeView.backgroundColor = .systemGreen
+                badgeView.layer.borderWidth = 2
+                badgeView.layer.borderColor = UIColor.white.cgColor
+                badgeView.tag = 999 // 識別用タグ
+                containerView.addSubview(badgeView)
+            }
+        } else {
+            // バッジを削除
+            containerView.subviews.first { $0.tag == 999 }?.removeFromSuperview()
+        }
+    }
+
     private func createAnnotationImageView(for post: Post) -> UIView {
         let containerView = UIView(frame: CGRect(x: 0, y: 0, width: 40, height: 40))
         
@@ -84,15 +142,6 @@ class PostMapAnnotationView: MKAnnotationView {
         }
         
         return containerView
-    }
-    
-    private func createCalloutView(for post: Post) -> UIView? {
-        let hostingController = UIHostingController(
-            rootView: PostCalloutView(post: post)
-        )
-        
-        hostingController.view.backgroundColor = .clear
-        return hostingController.view
     }
 }
 

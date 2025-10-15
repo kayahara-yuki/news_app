@@ -74,7 +74,20 @@ struct MapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
         }
-        
+
+        // MARK: - Overlay Rendering
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let circleOverlay = overlay as? MKCircle {
+                let renderer = MKCircleRenderer(circle: circleOverlay)
+                renderer.strokeColor = UIColor.systemBlue.withAlphaComponent(0.7)
+                renderer.fillColor = UIColor.systemBlue.withAlphaComponent(0.2)
+                renderer.lineWidth = 2
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+
         // MARK: - Clustering
         
         func mapView(_ mapView: MKMapView, clusterAnnotationForMemberAnnotations memberAnnotations: [MKAnnotation]) -> MKClusterAnnotation {
@@ -138,21 +151,55 @@ struct MapView: UIViewRepresentable {
            mapView.region.center.longitude != region.center.longitude {
             mapView.setRegion(region, animated: true)
         }
-        
+
+        // 10km圏内の円を表示
+        update10kmCircle(mapView: mapView)
+
         // アノテーションの更新
         updateAnnotations(mapView: mapView)
     }
     
     // MARK: - Private Methods
-    
-    private func updateAnnotations(mapView: MKMapView) {
-        // 既存のアノテーションを削除
-        let existingAnnotations = mapView.annotations.filter { !($0 is MKUserLocation) }
-        mapView.removeAnnotations(existingAnnotations)
 
-        // 投稿のアノテーションを追加（位置情報が有効な投稿のみ）
-        let postAnnotations = posts.compactMap { PostAnnotation(post: $0) }
-        mapView.addAnnotations(postAnnotations)
+    private func update10kmCircle(mapView: MKMapView) {
+        // 既存の円オーバーレイを削除
+        mapView.overlays.forEach { overlay in
+            if overlay is MKCircle {
+                mapView.removeOverlay(overlay)
+            }
+        }
+
+        // マップの中心座標に10km圏内の円を追加
+        let circle = MKCircle(center: region.center, radius: 10000) // 10km = 10000m
+        mapView.addOverlay(circle)
+    }
+
+    private func updateAnnotations(mapView: MKMapView) {
+        // パフォーマンス最適化: 差分更新を実装
+        // 全削除・全追加ではなく、変更があった部分のみ更新
+
+        // 既存の投稿アノテーションを取得（ユーザー位置以外）
+        let existingPostAnnotations = mapView.annotations.compactMap { $0 as? PostAnnotation }
+        let existingPostIDs = Set(existingPostAnnotations.map { $0.post.id })
+
+        // 新しい投稿アノテーションを生成（位置情報が有効な投稿のみ）
+        let newPostAnnotations = posts.compactMap { PostAnnotation(post: $0) }
+        let newPostIDs = Set(newPostAnnotations.map { $0.post.id })
+
+        // 削除すべきアノテーション（既存にあるが新規にない）
+        let annotationsToRemove = existingPostAnnotations.filter { !newPostIDs.contains($0.post.id) }
+        if !annotationsToRemove.isEmpty {
+            mapView.removeAnnotations(annotationsToRemove)
+        }
+
+        // 追加すべきアノテーション（新規にあるが既存にない）
+        let annotationsToAdd = newPostAnnotations.filter { !existingPostIDs.contains($0.post.id) }
+        if !annotationsToAdd.isEmpty {
+            mapView.addAnnotations(annotationsToAdd)
+        }
+
+        // Note: 既に存在するアノテーションは再利用されるため、更新不要
+        // MapKitが自動的にアノテーションビューを再利用します
 
         // 緊急事態のアノテーションを追加
         if showEmergencies {

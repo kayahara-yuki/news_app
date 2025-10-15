@@ -1,6 +1,18 @@
 import SwiftUI
 import MapKit
 
+// MARK: - Date Formatter Singleton
+
+/// パフォーマンス最適化: RelativeDateTimeFormatterのシングルトン化
+private extension RelativeDateTimeFormatter {
+    static let shared: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        formatter.locale = Locale(identifier: "ja_JP")
+        return formatter
+    }()
+}
+
 // MARK: - 近くの投稿カルーセルビュー
 
 struct NearbyPostsCarouselView: View {
@@ -49,10 +61,9 @@ struct NearbyPostsCarouselView: View {
             post: post,
             isSelected: selectedPost?.id == post.id,
             onTap: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    selectedPost = post
-                    scrollPosition = post.id
-                }
+                // パフォーマンス最適化: アニメーションを1箇所に統一（.animationモディファイアで制御）
+                selectedPost = post
+                scrollPosition = post.id
                 onPostTapped?(post)
             },
             onLocationTap: {
@@ -243,10 +254,7 @@ struct CarouselPostCardView: View {
     }
 
     private var timeAgoText: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        formatter.locale = Locale(identifier: "ja_JP")
-        return formatter.localizedString(for: post.createdAt, relativeTo: Date())
+        return RelativeDateTimeFormatter.shared.localizedString(for: post.createdAt, relativeTo: Date())
     }
 }
 

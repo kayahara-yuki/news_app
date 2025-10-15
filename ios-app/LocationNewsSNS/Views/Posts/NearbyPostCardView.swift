@@ -1,6 +1,18 @@
 import SwiftUI
 import MapKit
 
+// MARK: - Date Formatter Singleton
+
+/// パフォーマンス最適化: RelativeDateTimeFormatterのシングルトン化
+private extension RelativeDateTimeFormatter {
+    static let shared: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        formatter.locale = Locale(identifier: "ja_JP")
+        return formatter
+    }()
+}
+
 // MARK: - 近くの投稿カードビュー（縦スクロール用）
 
 struct NearbyPostCardView: View {
@@ -199,10 +211,7 @@ struct NearbyPostCardView: View {
     }
 
     private var timeAgoText: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        formatter.locale = Locale(identifier: "ja_JP")
-        return formatter.localizedString(for: post.createdAt, relativeTo: Date())
+        return RelativeDateTimeFormatter.shared.localizedString(for: post.createdAt, relativeTo: Date())
     }
 }
 

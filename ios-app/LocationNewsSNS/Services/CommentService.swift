@@ -15,7 +15,7 @@ class CommentService: ObservableObject {
     private let socialRepository: SocialRepositoryProtocol
     private let realtimeService: RealtimeService
     private var cancellables = Set<AnyCancellable>()
-    private var commentChannel: RealtimeChannel?
+    private var commentChannel: RealtimeChannelV2?
     
     init(socialRepository: SocialRepositoryProtocol? = nil, authService: AuthService? = nil) {
         // AuthServiceから現在のユーザーIDを取得
@@ -30,10 +30,12 @@ class CommentService: ObservableObject {
     private func setupRealtimeSubscriptions() {
         // TODO: Supabase Realtime API の型定義が必要
         // リアルタイムイベント処理は一旦無効化
-        commentChannel = realtimeService.subscribeToChannel(
-            "comments_updates",
-            table: "comments"
-        )
+        Task {
+            commentChannel = await realtimeService.subscribeToChannel(
+                "comments_updates",
+                table: "comments"
+            )
+        }
     }
     
     // MARK: - コメント管理

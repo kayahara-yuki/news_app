@@ -18,7 +18,7 @@ class SocialService: ObservableObject {
     private let socialRepository: SocialRepositoryProtocol
     private let realtimeService: RealtimeService
     private var cancellables = Set<AnyCancellable>()
-    private var followChannel: RealtimeChannel?
+    private var followChannel: RealtimeChannelV2?
     
     init(socialRepository: SocialRepositoryProtocol? = nil, authService: AuthService? = nil) {
         // AuthServiceから現在のユーザーIDを取得
@@ -31,12 +31,14 @@ class SocialService: ObservableObject {
     // MARK: - Realtime Setup
     
     private func setupRealtimeSubscriptions() {
-        // フォロー関連のリアルタイム更新
-        followChannel = realtimeService.subscribeToChannel(
-            "social_updates",
-            table: "follows"
-        )
-        
+        Task {
+            // フォロー関連のリアルタイム更新
+            followChannel = await realtimeService.subscribeToChannel(
+                "social_updates",
+                table: "follows"
+            )
+        }
+
         // リアルタイムイベント処理は RealtimeService 内で管理
         // 必要に応じて NotificationCenter でイベントを受け取る
     }

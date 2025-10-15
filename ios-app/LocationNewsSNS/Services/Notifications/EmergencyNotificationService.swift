@@ -17,7 +17,7 @@ class EmergencyNotificationService: ObservableObject {
     private let realtimeService: RealtimeService
     
     private var cancellables = Set<AnyCancellable>()
-    private var emergencyChannel: RealtimeChannel?
+    private var emergencyChannel: RealtimeChannelV2?
     
     // 緊急レベル別の設定
     private let criticalRadius: Double = 5000 // 5km
@@ -41,10 +41,12 @@ class EmergencyNotificationService: ObservableObject {
     // MARK: - Setup
     
     private func setupEmergencyChannel() {
-        emergencyChannel = realtimeService.subscribeToChannel(
-            "emergency_alerts",
-            table: "emergency_events"
-        )
+        Task {
+            emergencyChannel = await realtimeService.subscribeToChannel(
+                "emergency_alerts",
+                table: "emergency_events"
+            )
+        }
         
         // TODO: Supabase Realtime V2 APIに移行が必要
         /*

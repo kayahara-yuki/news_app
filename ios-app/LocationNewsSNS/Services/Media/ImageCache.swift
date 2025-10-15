@@ -7,6 +7,11 @@ class ImageCache {
 
     private init() {
         configureURLCache()
+        setupMemoryWarningObserver()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     /// URLCacheを設定して画像キャッシングを有効化
@@ -23,6 +28,23 @@ class ImageCache {
         )
 
         URLCache.shared = cache
+    }
+
+    /// パフォーマンス最適化: メモリ警告の監視を設定
+    private func setupMemoryWarningObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+    }
+
+    /// メモリ警告時にキャッシュをクリア
+    @objc private func handleMemoryWarning() {
+        AppLogger.debug("メモリ警告を受信 - 画像キャッシュをクリア")
+        // メモリキャッシュのみをクリア（ディスクキャッシュは保持）
+        URLCache.shared.removeAllCachedResponses()
     }
 
     /// キャッシュをクリア

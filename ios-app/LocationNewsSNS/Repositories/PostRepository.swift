@@ -28,9 +28,29 @@ protocol PostRepositoryProtocol {
 class PostRepository: PostRepositoryProtocol {
     private let supabase = SupabaseConfig.shared.client
 
-    nonisolated func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double) async throws -> [Post] {
+    // パフォーマンス最適化: キャッシュ層
+    private let nearbyPostsCache = NSCache<NSString, CachedPosts>()
+    private let cacheTTL: TimeInterval = 300 // 5分
+
+    nonisolated func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double = 10000) async throws -> [Post] {
         AppLogger.debug("fetchNearbyPosts - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
+
+        // キャッシュキーの生成（位置情報を100m単位で丸める）
+        let roundedLat = round(latitude * 1000) / 1000 // 約100m精度
+        let roundedLng = round(longitude * 1000) / 1000
+        let cacheKey = "nearby_\(roundedLat)_\(roundedLng)_\(Int(radius))" as NSString
+
+        // キャッシュチェック
+        if let cached = nearbyPostsCache.object(forKey: cacheKey),
+           Date().timeIntervalSince(cached.timestamp) < cacheTTL {
+            AppLogger.debug("キャッシュヒット: \(cached.posts.count) 件")
+            return cached.posts
+        }
+
+        AppLogger.debug("キャッシュミス - API呼び出し")
+
         // PostGIS nearby_posts_with_user RPC関数を使用した近隣検索
+        // デフォルト半径: 10km (10000m) - パフォーマンス最適化のため制限
         // radiusはすでにメートル単位で渡されているので、そのまま使用
         let radiusMeters = Int(radius)
 
@@ -59,6 +79,11 @@ class PostRepository: PostRepositoryProtocol {
         AppLogger.debug("RPC レスポンス: \(response.count) 件")
         let posts = try response.map { try $0.toPost() }
         AppLogger.debug("Post変換完了: \(posts.count) 件")
+
+        // キャッシュに保存
+        let cachedPosts = CachedPosts(posts: posts, timestamp: Date())
+        nearbyPostsCache.setObject(cachedPosts, forKey: cacheKey)
+
         return posts
     }
     
@@ -739,6 +764,19 @@ struct NearbyPostResponse: Decodable {
             createdAt: createdDate,
             updatedAt: updatedDate
         )
+    }
+}
+
+// MARK: - Cache Models
+
+/// キャッシュされた投稿データ
+class CachedPosts {
+    let posts: [Post]
+    let timestamp: Date
+
+    init(posts: [Post], timestamp: Date) {
+        self.posts = posts
+        self.timestamp = timestamp
     }
 }
 

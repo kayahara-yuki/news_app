@@ -18,8 +18,10 @@ class RealtimeLocationManager: ObservableObject {
     private let locationService: LocationService
     private let locationPrivacyService: LocationPrivacyService
     
-    private var locationChannel: RealtimeChannel?
-    private var emergencyChannel: RealtimeChannel?
+    private var locationChannel: RealtimeChannelV2?
+    private var emergencyChannel: RealtimeChannelV2?
+    private var locationChannelName: String?
+    private var emergencyChannelName: String?
     private var cancellables = Set<AnyCancellable>()
     
     // 設定
@@ -68,44 +70,48 @@ class RealtimeLocationManager: ObservableObject {
     /// 位置情報共有を開始
     func startLocationSharing(userID: UUID) {
         guard !isLocationSharingActive else { return }
-        
+
         // プライバシー設定を確認
         guard locationPrivacyService.privacySettings.locationSharing else {
             print("Location sharing is disabled in privacy settings")
             return
         }
-        
-        // リアルタイムチャンネルを設定
-        let channelName = "location:sharing"
-        locationChannel = realtimeService.subscribeToChannel(channelName)
-        
-        // プレゼンスを有効化
-        if let channel = locationChannel {
-            realtimeService.enablePresence(
-                on: channel,
-                userID: userID,
-                metadata: ["sharing_mode": "standard"]
-            )
-            
-            // プレゼンスイベントを監視
-            setupPresenceListeners(on: channel)
+
+        Task {
+            // リアルタイムチャンネルを設定
+            let channelName = "location:sharing"
+            locationChannelName = channelName
+            locationChannel = await realtimeService.subscribeToChannel(channelName)
+
+            // プレゼンスを有効化
+            if let channel = locationChannel {
+                realtimeService.enablePresence(
+                    on: channel,
+                    userID: userID,
+                    metadata: ["sharing_mode": "standard"]
+                )
+
+                // プレゼンスイベントを監視
+                setupPresenceListeners(on: channel)
+            }
+
+            // 定期的な位置情報更新を開始
+            startLocationUpdateTimer()
+
+            isLocationSharingActive = true
         }
-        
-        // 定期的な位置情報更新を開始
-        startLocationUpdateTimer()
-        
-        isLocationSharingActive = true
     }
     
     /// 位置情報共有を停止
     func stopLocationSharing() {
         guard isLocationSharingActive else { return }
-        
-        if let channelName = locationChannel?.topic {
+
+        if let channelName = locationChannelName {
             realtimeService.unsubscribeFromChannel(channelName)
         }
-        
+
         locationChannel = nil
+        locationChannelName = nil
         stopLocationUpdateTimer()
         nearbyUsers.removeAll()
         isLocationSharingActive = false
@@ -115,36 +121,42 @@ class RealtimeLocationManager: ObservableObject {
     
     private func startEmergencyLocationSharing() {
         guard let userID = getCurrentUserID() else { return }
-        
-        // 緊急チャンネルを設定
-        let channelName = "emergency:location"
-        emergencyChannel = realtimeService.subscribeToChannel(channelName)
-        
-        if let channel = emergencyChannel {
-            // 高頻度で位置情報を送信
-            realtimeService.enablePresence(
-                on: channel,
-                userID: userID,
-                metadata: ["emergency": true, "timestamp": Date().iso8601String]
-            )
-            
-            // 緊急アラートを監視
-            setupEmergencyListeners(on: channel)
-        }
-        
-        // 位置情報の更新頻度を上げる
-        stopLocationUpdateTimer()
-        locationUpdateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            self?.broadcastCurrentLocation()
+
+        Task {
+            // 緊急チャンネルを設定
+            let channelName = "emergency:location"
+            emergencyChannelName = channelName
+            emergencyChannel = await realtimeService.subscribeToChannel(channelName)
+
+            if let channel = emergencyChannel {
+                // 高頻度で位置情報を送信
+                realtimeService.enablePresence(
+                    on: channel,
+                    userID: userID,
+                    metadata: ["emergency": true, "timestamp": Date().iso8601String]
+                )
+
+                // 緊急アラートを監視
+                setupEmergencyListeners(on: channel)
+            }
+
+            // 位置情報の更新頻度を上げる
+            stopLocationUpdateTimer()
+            locationUpdateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.broadcastCurrentLocation()
+                }
+            }
         }
     }
     
     private func stopEmergencyLocationSharing() {
-        if let channelName = emergencyChannel?.topic {
+        if let channelName = emergencyChannelName {
             realtimeService.unsubscribeFromChannel(channelName)
         }
 
         emergencyChannel = nil
+        emergencyChannelName = nil
         // TODO: emergencyAlerts再有効化後にコメント解除
         // emergencyAlerts.removeAll()
 
@@ -156,7 +168,7 @@ class RealtimeLocationManager: ObservableObject {
     
     // MARK: - Channel Listeners
 
-    private func setupPresenceListeners(on channel: RealtimeChannel) {
+    private func setupPresenceListeners(on channel: RealtimeChannelV2) {
         // TODO: Supabase Realtime API更新に伴い、Presence APIの使用方法を見直す必要があります
         // 古いAPIメソッド (onPresenceSync, onPresenceJoin, onPresenceLeave, onBroadcast) は利用不可
         /*
@@ -182,7 +194,7 @@ class RealtimeLocationManager: ObservableObject {
         */
     }
 
-    private func setupEmergencyListeners(on channel: RealtimeChannel) {
+    private func setupEmergencyListeners(on channel: RealtimeChannelV2) {
         // TODO: Supabase Realtime API更新に伴い、Broadcast APIの使用方法を見直す必要があります
         /*
         // 緊急アラート
@@ -312,12 +324,12 @@ class RealtimeLocationManager: ObservableObject {
         // プライバシー設定に基づいて位置を調整
         let adjustedCoordinate = locationPrivacyService.processLocation(location.coordinate)
         
-        var additionalInfo: [String: Any] = ["user_id": userID.uuidString]
-        
+        var additionalInfo: [String: AnyJSON] = ["user_id": .string(userID.uuidString)]
+
         if locationPrivacyService.isEmergencyMode {
-            additionalInfo["emergency"] = true
+            additionalInfo["emergency"] = .bool(true)
         }
-        
+
         realtimeService.broadcastLocation(
             on: channel,
             coordinate: adjustedCoordinate,
@@ -328,24 +340,17 @@ class RealtimeLocationManager: ObservableObject {
     
     // MARK: - Utilities
     
-    private func updateNearbyUsers(from channel: RealtimeChannel) {
+    private func updateNearbyUsers(from channel: RealtimeChannelV2) {
+        // TODO: RealtimeV2ではpresenceChange()を使用する必要があります
+        // 新しいAPIに移行するまで一旦コメントアウト
+        /*
         Task {
-            let presences = await channel.presenceState()
-            
-            nearbyUsers = presences.compactMap { _, presence in
-                guard let userID = presence["user_id"] as? String,
-                      let latitude = presence["latitude"] as? Double,
-                      let longitude = presence["longitude"] as? Double else { return nil }
-                
-                let nearbyUser = NearbyUser(
-                    userID: UUID(uuidString: userID) ?? UUID(),
-                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                    lastUpdated: Date()
-                )
-                
-                return isUserNearby(nearbyUser) ? nearbyUser : nil
+            for await presence in channel.presenceChange() {
+                // joins と leaves を処理
+                // presenceChange() の戻り値を使用して nearbyUsers を更新
             }
         }
+        */
     }
     
     private func isUserNearby(_ user: NearbyUser) -> Bool {
@@ -364,7 +369,9 @@ class RealtimeLocationManager: ObservableObject {
             withTimeInterval: locationUpdateInterval,
             repeats: true
         ) { [weak self] _ in
-            self?.broadcastCurrentLocation()
+            Task { @MainActor in
+                self?.broadcastCurrentLocation()
+            }
         }
     }
     

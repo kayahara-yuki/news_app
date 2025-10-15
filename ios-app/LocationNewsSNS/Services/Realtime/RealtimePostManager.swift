@@ -15,7 +15,8 @@ class RealtimePostManager: ObservableObject {
     private let postRepository: any PostRepositoryProtocol
     private let locationService: any LocationServiceProtocol
 
-    var postChannel: RealtimeChannel?
+    var postChannel: RealtimeChannelV2?
+    private var postChannelName: String?
     private var cancellables = Set<AnyCancellable>()
     private let updateBufferSize = 50
 
@@ -63,35 +64,37 @@ class RealtimePostManager: ObservableObject {
         radius: Double = 5000
     ) {
         guard !isSubscribed else { return }
-        
+
         monitoringCenter = center
         monitoringRadius = radius
-        
-        // Supabase Realtimeチャンネルを設定
-        let channelName = "posts:nearby:\(center.latitude),\(center.longitude)"
-        
-        postChannel = realtimeService.subscribeToChannel(
-            channelName,
-            table: "posts"
-        )
-        
-        // 追加のイベントリスナーを設定
-        setupPostChannelListeners()
-        
-        isSubscribed = true
-        
-        // 初期データを取得
+
         Task {
+            // Supabase Realtimeチャンネルを設定
+            let channelName = "posts:nearby:\(center.latitude),\(center.longitude)"
+            postChannelName = channelName
+
+            postChannel = await realtimeService.subscribeToChannel(
+                channelName,
+                table: "posts"
+            )
+
+            // 追加のイベントリスナーを設定
+            setupPostChannelListeners()
+
+            isSubscribed = true
+
+            // 初期データを取得
             await fetchInitialPosts()
         }
     }
     
     /// 監視を停止
     func stopMonitoring() {
-        guard isSubscribed, let channelName = postChannel?.topic else { return }
-        
+        guard isSubscribed, let channelName = postChannelName else { return }
+
         realtimeService.unsubscribeFromChannel(channelName)
         postChannel = nil
+        postChannelName = nil
         isSubscribed = false
         realtimePosts.removeAll()
         latestUpdates.removeAll()
@@ -173,7 +176,7 @@ class RealtimePostManager: ObservableObject {
     // MARK: - Location Updates
     
     private func updateMonitoringLocation(_ newCenter: CLLocationCoordinate2D) {
-        // 位置が大きく変わった場合は再購読
+        // パフォーマンス最適化: 完全な再購読ではなく、差分更新を実装
         if let currentCenter = monitoringCenter {
             let distance = CLLocation(
                 latitude: currentCenter.latitude,
@@ -182,30 +185,73 @@ class RealtimePostManager: ObservableObject {
                 latitude: newCenter.latitude,
                 longitude: newCenter.longitude
             ))
-            
+
             if distance > monitoringRadius / 2 {
-                // 監視範囲を更新
-                stopMonitoring()
-                startMonitoringNearbyPosts(center: newCenter, radius: monitoringRadius)
+                // 監視範囲を更新（既存データは保持）
+                monitoringCenter = newCenter
+
+                // 新しい範囲の投稿を追加取得（既存データとマージ）
+                Task {
+                    await fetchAndMergeNewPosts(center: newCenter)
+                }
             }
         }
     }
     
     // MARK: - Data Fetching
-    
+
     private func fetchInitialPosts() async {
         guard let center = monitoringCenter else { return }
-        
+
+        // パフォーマンス最適化: 重複取得防止
+        // 既存データがある場合はスキップ（キャッシュが有効な場合）
+        guard realtimePosts.isEmpty else {
+            AppLogger.debug("既存データが存在するため、初期取得をスキップ")
+            return
+        }
+
         do {
             let posts = try await postRepository.fetchNearbyPosts(
                 latitude: center.latitude,
                 longitude: center.longitude,
                 radius: monitoringRadius
             )
-            
+
             realtimePosts = posts
         } catch {
             print("Failed to fetch initial posts: \(error)")
+        }
+    }
+
+    private func fetchAndMergeNewPosts(center: CLLocationCoordinate2D) async {
+        do {
+            let newPosts = try await postRepository.fetchNearbyPosts(
+                latitude: center.latitude,
+                longitude: center.longitude,
+                radius: monitoringRadius
+            )
+
+            // 既存の投稿IDセット
+            let existingIDs = Set(realtimePosts.map { $0.id })
+
+            // 新規投稿のみを追加（重複を避ける）
+            let uniqueNewPosts = newPosts.filter { !existingIDs.contains($0.id) }
+
+            if !uniqueNewPosts.isEmpty {
+                realtimePosts.append(contentsOf: uniqueNewPosts)
+                AppLogger.debug("新規投稿を追加: \(uniqueNewPosts.count) 件")
+            }
+
+            // 範囲外の投稿を削除（オプション）
+            let currentLocation = CLLocation(latitude: center.latitude, longitude: center.longitude)
+            realtimePosts = realtimePosts.filter { post in
+                guard let postLat = post.latitude, let postLng = post.longitude else { return false }
+                let postLocation = CLLocation(latitude: postLat, longitude: postLng)
+                return currentLocation.distance(from: postLocation) <= monitoringRadius
+            }
+
+        } catch {
+            print("Failed to fetch and merge new posts: \(error)")
         }
     }
     
