@@ -10,54 +10,14 @@ struct NearbyPostsCarouselView: View {
     let onPostTapped: ((Post) -> Void)?
     let onLocationTapped: ((CLLocationCoordinate2D) -> Void)?
 
-    @State private var scrollPosition: Int?
+    @State private var scrollPosition: UUID?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // ヘッダー
-            carouselHeader
-
-            // カルーセル本体
-            if posts.isEmpty {
-                emptyStateView
-            } else {
-                carouselContent
-            }
+        if posts.isEmpty {
+            emptyStateView
+        } else {
+            carouselContent
         }
-        .background(.ultraThinMaterial)
-        .cornerRadius(20, corners: [.topLeft, .topRight])
-        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: -5)
-    }
-
-    // MARK: - Carousel Header
-
-    @ViewBuilder
-    private var carouselHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("近くの投稿")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                Text("\(posts.count)件の投稿")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            // フィルターボタン（将来の拡張用）
-            Button(action: {}) {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 16))
-                    .foregroundColor(.blue)
-                    .padding(8)
-                    .background(Color.blue.opacity(0.1))
-                    .clipShape(Circle())
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
     }
 
     // MARK: - Carousel Content
@@ -65,37 +25,46 @@ struct NearbyPostsCarouselView: View {
     @ViewBuilder
     private var carouselContent: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 16) {
-                ForEach(Array(posts.enumerated()), id: \.element.id) { index, post in
-                    CarouselPostCardView(
-                        post: post,
-                        isSelected: selectedPost?.id == post.id,
-                        onTap: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                selectedPost = post
-                                scrollPosition = index
-                            }
-                            onPostTapped?(post)
-                        },
-                        onLocationTap: {
-                            if let lat = post.latitude, let lng = post.longitude {
-                                onLocationTapped?(CLLocationCoordinate2D(
-                                    latitude: lat,
-                                    longitude: lng
-                                ))
-                            }
-                        }
-                    )
-                    .id(index)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .scrollTargetLayout()
+            carouselStack
         }
         .scrollPosition(id: $scrollPosition)
         .scrollTargetBehavior(.viewAligned)
-        .frame(height: 220)
+        .frame(height: 200)
+    }
+
+    @ViewBuilder
+    private var carouselStack: some View {
+        LazyHStack(spacing: 16) {
+            ForEach(posts) { post in
+                carouselCard(for: post)
+            }
+        }
+        .padding(.horizontal, 16)
+        .scrollTargetLayout()
+    }
+
+    @ViewBuilder
+    private func carouselCard(for post: Post) -> some View {
+        CarouselPostCardView(
+            post: post,
+            isSelected: selectedPost?.id == post.id,
+            onTap: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    selectedPost = post
+                    scrollPosition = post.id
+                }
+                onPostTapped?(post)
+            },
+            onLocationTap: {
+                if let lat = post.latitude, let lng = post.longitude {
+                    onLocationTapped?(CLLocationCoordinate2D(
+                        latitude: lat,
+                        longitude: lng
+                    ))
+                }
+            }
+        )
+        .id(post.id)
     }
 
     // MARK: - Empty State
@@ -137,26 +106,14 @@ struct CarouselPostCardView: View {
                 // 画像セクション（もし画像があれば）- mediaUrlsは削除されたためコメントアウト
                 // if let imageUrl = post.mediaUrls?.first {
                 if false { // 画像表示は将来実装
-                    AsyncImage(url: URL(string: "")) { phase in
-                        switch phase {
-                        case .empty:
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.2))
-                                .overlay(ProgressView())
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.2))
-                                .overlay(
-                                    Image(systemName: "photo")
-                                        .foregroundColor(.gray)
-                                )
-                        @unknown default:
-                            EmptyView()
-                        }
+                    CachedAsyncImage(url: URL(string: "")) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay(ProgressView())
                     }
                     .frame(height: 100)
                     .clipped()
@@ -257,13 +214,13 @@ struct CarouselPostCardView: View {
             .frame(width: 280)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? Color.blue.opacity(0.1) : Color(.systemBackground))
+                    .fill(isSelected ? Color.blue.opacity(0.15) : Color.white.opacity(0.95))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Color.blue : Color.gray.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? Color.blue : Color.white.opacity(0.3), lineWidth: isSelected ? 2 : 1)
             )
-            .shadow(color: .black.opacity(isSelected ? 0.15 : 0.08), radius: isSelected ? 8 : 4, x: 0, y: 2)
+            .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
             .scaleEffect(isSelected ? 1.02 : 1.0)
         }
         .buttonStyle(PlainButtonStyle())

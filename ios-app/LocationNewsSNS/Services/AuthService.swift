@@ -8,16 +8,16 @@ import Combine
 class AuthService: ObservableObject, AuthServiceProtocol {
     @Published var currentUser: UserProfile?
     @Published var isAuthenticated = false
-    @Published var isLoading = false
+    @Published var isLoading = true  // 初期化時はローディング状態
     @Published var errorMessage: String?
-    
+
     private let supabase = SupabaseConfig.shared.client
     private var cancellables = Set<AnyCancellable>()
-    
+
     init() {
         // 認証状態の監視
         observeAuthStateChanges()
-        
+
         // 既存のセッションをチェック
         Task {
             await checkExistingSession()

@@ -115,7 +115,7 @@ struct PostPreviewView: View {
         HStack(alignment: .top, spacing: 12) {
             // ユーザーアバター
             if let avatarURL = authService.currentUser?.avatarURL {
-                AsyncImage(url: URL(string: avatarURL)) { image in
+                CachedAsyncImage(url: URL(string: avatarURL)) { image in
                     image
                         .resizable()
                         .scaledToFill()

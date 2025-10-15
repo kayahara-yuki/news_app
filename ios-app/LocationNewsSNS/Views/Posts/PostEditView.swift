@@ -551,7 +551,7 @@ struct ExistingMediaGrid: View {
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
             ForEach(Array(mediaFiles.enumerated()), id: \.element.id) { index, mediaFile in
-                AsyncImage(url: URL(string: mediaFile.url)) { image in
+                CachedAsyncImage(url: URL(string: mediaFile.url)) { image in
                     image
                         .resizable()
                         .scaledToFill()

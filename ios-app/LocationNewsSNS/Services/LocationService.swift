@@ -35,13 +35,23 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
         super.init()
         setupLocationManager()
     }
-    
+
+    deinit {
+        // Main Actor分離されたメソッドを非同期で呼び出し
+        Task { @MainActor in
+            self.stopLocationUpdates()
+        }
+        AppLogger.debug("deinit called")
+    }
+
     // MARK: - セットアップ
     
     private func setupLocationManager() {
         locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-        locationManager.distanceFilter = 10 // 10m移動したら更新
+        // パフォーマンス最適化: 精度を100mに設定してバッテリー消費を削減
+        locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        // パフォーマンス最適化: 100m移動したら更新（頻繁な更新を防ぐ）
+        locationManager.distanceFilter = 100
 
         // バックグラウンド位置情報の設定（必要に応じて）
         // locationManager.allowsBackgroundLocationUpdates = true

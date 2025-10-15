@@ -40,9 +40,8 @@ class SocialRepository: SocialRepositoryProtocol {
     private let supabase = SupabaseConfig.shared.client
     private let currentUserID: UUID
     
-    init() {
-        // TODO: 実際の実装では認証サービスから取得
-        self.currentUserID = UUID()
+    init(currentUserID: UUID) {
+        self.currentUserID = currentUserID
     }
     
     // MARK: - フォロー関連
@@ -76,6 +75,14 @@ class SocialRepository: SocialRepositoryProtocol {
     }
     
     func getFollowers(userID: UUID) async throws -> [UserProfile] {
+        struct FollowWithUser: Codable {
+            let follower: UserProfile
+            
+            enum CodingKeys: String, CodingKey {
+                case follower
+            }
+        }
+        
         let response = try await supabase
             .from("follows")
             .select("follower:user_profiles!follower_id(*)")
@@ -83,12 +90,19 @@ class SocialRepository: SocialRepositoryProtocol {
             .order("created_at", ascending: false)
             .execute()
         
-        let data = response.data
-        // TODO: JSONから[UserProfile]にデコード
-        return []
+        let followers = try JSONDecoder().decode([FollowWithUser].self, from: response.data)
+        return followers.map { $0.follower }
     }
     
     func getFollowing(userID: UUID) async throws -> [UserProfile] {
+        struct FollowWithUser: Codable {
+            let following: UserProfile
+            
+            enum CodingKeys: String, CodingKey {
+                case following
+            }
+        }
+        
         let response = try await supabase
             .from("follows")
             .select("following:user_profiles!following_id(*)")
@@ -96,9 +110,8 @@ class SocialRepository: SocialRepositoryProtocol {
             .order("created_at", ascending: false)
             .execute()
         
-        let data = response.data
-        // TODO: JSONから[UserProfile]にデコード
-        return []
+        let following = try JSONDecoder().decode([FollowWithUser].self, from: response.data)
+        return following.map { $0.following }
     }
     
     func checkFollowStatus(userID: UUID) async throws -> Bool {
@@ -117,32 +130,45 @@ class SocialRepository: SocialRepositoryProtocol {
         // フォロワー数
         let followersResponse = try await supabase
             .from("follows")
-            .select("id", head: true)
+            .select("id", head: false, count: .exact)
             .eq("following_id", value: userID.uuidString)
             .execute()
         
         // フォロー中数
         let followingResponse = try await supabase
             .from("follows")
-            .select("id", head: true)
+            .select("id", head: false, count: .exact)
             .eq("follower_id", value: userID.uuidString)
             .execute()
         
         // 投稿数
         let postsResponse = try await supabase
             .from("posts")
-            .select("id", head: true)
+            .select("id", head: false, count: .exact)
             .eq("user_id", value: userID.uuidString)
             .execute()
         
-        // TODO: 実際の数値を取得
+        // いいね受信数
+        let likesResponse = try await supabase
+            .from("likes")
+            .select("id", head: false, count: .exact)
+            .eq("post_id", value: "(SELECT id FROM posts WHERE user_id = '\(userID.uuidString)')")
+            .execute()
+        
+        // コメント受信数
+        let commentsResponse = try await supabase
+            .from("comments")
+            .select("id", head: false, count: .exact)
+            .eq("post_id", value: "(SELECT id FROM posts WHERE user_id = '\(userID.uuidString)')")
+            .execute()
+        
         return SocialStats(
             userID: userID,
-            followersCount: 0, // followersResponse.count
-            followingCount: 0, // followingResponse.count
-            postsCount: 0, // postsResponse.count
-            totalLikesReceived: 0,
-            totalCommentsReceived: 0
+            followersCount: followersResponse.count ?? 0,
+            followingCount: followingResponse.count ?? 0,
+            postsCount: postsResponse.count ?? 0,
+            totalLikesReceived: likesResponse.count ?? 0,
+            totalCommentsReceived: commentsResponse.count ?? 0
         )
     }
     

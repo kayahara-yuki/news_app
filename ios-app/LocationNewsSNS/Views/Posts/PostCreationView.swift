@@ -21,7 +21,12 @@ struct PostCreationView: View {
     @State private var emergencyLevel: EmergencyLevel?
     @State private var tags: Set<String> = []
     @State private var newTag = ""
-    
+    @State private var urlInput = ""
+    @State private var urlMetadata: URLMetadata?
+    @State private var isLoadingMetadata = false
+
+    @StateObject private var urlMetadataService = URLMetadataService()
+
     @State private var showingLocationPicker = false
     @State private var showingEmergencyAlert = false
     @State private var isUploading = false
@@ -41,7 +46,10 @@ struct PostCreationView: View {
                     
                     // 投稿内容入力
                     contentInputSection
-                    
+
+                    // URL入力セクション
+                    urlInputSection
+
                     // メディア選択・プレビュー
                     mediaSection
                     
@@ -115,7 +123,7 @@ struct PostCreationView: View {
                 }
             }
         }
-        .onAppear {
+        .task {
             setupInitialLocation()
         }
     }
@@ -127,7 +135,7 @@ struct PostCreationView: View {
         HStack(alignment: .top, spacing: 12) {
             // ユーザーアバター
             if let avatarURL = authService.currentUser?.avatarURL {
-                AsyncImage(url: URL(string: avatarURL)) { image in
+                CachedAsyncImage(url: URL(string: avatarURL)) { image in
                     image
                         .resizable()
                         .scaledToFill()
@@ -198,6 +206,58 @@ struct PostCreationView: View {
         }
     }
     
+    // MARK: - URL Input Section
+
+    @ViewBuilder
+    private var urlInputSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("ニュースリンク")
+                    .font(.headline)
+
+                Spacer()
+
+                if isLoadingMetadata {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
+
+            // URL入力フィールド
+            HStack {
+                Image(systemName: "link")
+                    .foregroundColor(.secondary)
+
+                TextField("URLを入力（例: https://example.com/news）", text: $urlInput)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+                    .onChange(of: urlInput) { _, newValue in
+                        if !newValue.isEmpty && urlInput.contains("http") {
+                            fetchURLMetadata(newValue)
+                        } else if newValue.isEmpty {
+                            urlMetadata = nil
+                        }
+                    }
+
+                if !urlInput.isEmpty {
+                    Button(action: {
+                        urlInput = ""
+                        urlMetadata = nil
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            // URLメタデータプレビュー
+            if let metadata = urlMetadata {
+                URLMetadataPreviewCard(metadata: metadata)
+            }
+        }
+    }
+
     // MARK: - Media Section
     
     @ViewBuilder
@@ -455,6 +515,8 @@ struct PostCreationView: View {
             do {
                 let request = CreatePostRequest(
                     content: postContent,
+                    url: urlInput.isEmpty ? nil : urlInput,
+                    urlMetadata: urlMetadata,
                     latitude: selectedLocation?.latitude,
                     longitude: selectedLocation?.longitude,
                     locationName: locationName,
@@ -483,16 +545,51 @@ struct PostCreationView: View {
     
     private func saveDraft() {
         guard !postContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        
+
         isDraftSaving = true
-        
+
         Task {
             // TODO: 下書き保存機能の実装
             try await Task.sleep(nanoseconds: 1_000_000_000) // 1秒待機（デモ用）
-            
+
             await MainActor.run {
                 isDraftSaving = false
                 dismiss()
+            }
+        }
+    }
+
+    private func fetchURLMetadata(_ urlString: String) {
+        // デバウンス処理（0.5秒待機してから取得）
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+
+            guard urlInput == urlString else { return }
+
+            await MainActor.run {
+                isLoadingMetadata = true
+            }
+
+            do {
+                let metadata = try await urlMetadataService.fetchMetadata(from: urlString)
+
+                await MainActor.run {
+                    self.urlMetadata = metadata
+                    self.isLoadingMetadata = false
+
+                    // 位置情報が抽出された場合は自動設定
+                    if let extractedLocation = metadata?.extractedLocation,
+                       let coordinate = extractedLocation.clCoordinate,
+                       extractedLocation.confidence > 0.5 {
+                        self.selectedLocation = coordinate
+                        self.locationName = extractedLocation.address ?? ""
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoadingMetadata = false
+                }
+                print("メタデータ取得エラー: \(error)")
             }
         }
     }
@@ -527,21 +624,21 @@ struct LocationPreviewCard: View {
     let coordinate: CLLocationCoordinate2D
     let locationName: String
     let onRemove: () -> Void
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(locationName)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                
+
                 Text("\(coordinate.latitude, specifier: "%.4f"), \(coordinate.longitude, specifier: "%.4f")")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
+
             Spacer()
-            
+
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundColor(.secondary)
@@ -550,6 +647,69 @@ struct LocationPreviewCard: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(8)
+    }
+}
+
+struct URLMetadataPreviewCard: View {
+    let metadata: URLMetadata
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // サムネイル画像
+            if let imageURLString = metadata.imageURL,
+               let imageURL = URL(string: imageURLString) {
+                CachedAsyncImage(url: imageURL) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 150)
+                        .clipped()
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 150)
+                        .overlay {
+                            ProgressView()
+                        }
+                }
+                .cornerRadius(8)
+            }
+
+            // タイトルと説明
+            VStack(alignment: .leading, spacing: 4) {
+                if let title = metadata.title {
+                    Text(title)
+                        .font(.headline)
+                        .lineLimit(2)
+                }
+
+                if let description = metadata.description {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+                }
+
+                HStack(spacing: 8) {
+                    if let siteName = metadata.siteName {
+                        Label(siteName, systemImage: "globe")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if let extractedLocation = metadata.extractedLocation,
+                       let address = extractedLocation.address {
+                        Label(address, systemImage: "location.fill")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+        }
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 }
 

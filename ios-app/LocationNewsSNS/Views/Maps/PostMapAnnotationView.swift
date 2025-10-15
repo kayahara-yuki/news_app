@@ -106,7 +106,7 @@ struct PostCalloutView: View {
             // ユーザー情報
             HStack {
                 if let avatarURL = post.user.avatarURL {
-                    AsyncImage(url: URL(string: avatarURL)) { image in
+                    CachedAsyncImage(url: URL(string: avatarURL)) { image in
                         image
                             .resizable()
                             .scaledToFill()

@@ -9,32 +9,32 @@ struct ContentView: View {
     @State private var showingPostCreation = false
     @State private var selectedPost: Post?
     @State private var showingPostDetail = false
-    @StateObject private var viewModel = NearbyPostsViewModel()
+    @EnvironmentObject private var viewModel: NearbyPostsViewModel
 
     var body: some View {
         TabView {
             // メイン地図画面
             NavigationStack {
                 ZStack {
+                    // パフォーマンス最適化: カスタムMapAnnotationから標準Markerに変更
                     Map(coordinateRegion: $region, annotationItems: viewModel.posts) { post in
                         MapAnnotation(coordinate: CLLocationCoordinate2D(
                             latitude: post.latitude ?? 35.6762,
                             longitude: post.longitude ?? 139.6503
                         )) {
-                            VStack(spacing: 0) {
-                                Image(systemName: post.isUrgent ? "exclamationmark.triangle.fill" : "mappin.circle.fill")
-                                    .font(.title)
-                                    .foregroundColor(post.isUrgent ? .red : .blue)
-                                    .background(
-                                        Circle()
-                                            .fill(.white)
-                                            .frame(width: 32, height: 32)
-                                    )
-                            }
-                            .onTapGesture {
-                                selectedPost = post
-                                showingPostDetail = true
-                            }
+                            // 簡素化されたアノテーションビュー
+                            Image(systemName: post.isUrgent ? "exclamationmark.triangle.fill" : "mappin.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(post.isUrgent ? .red : .blue)
+                                .background(
+                                    Circle()
+                                        .fill(.white)
+                                        .frame(width: 28, height: 28)
+                                )
+                                .onTapGesture {
+                                    selectedPost = post
+                                    showingPostDetail = true
+                                }
                         }
                     }
                     .ignoresSafeArea()
@@ -103,45 +103,24 @@ struct PostListBottomSheet: View {
     @ObservedObject var viewModel: NearbyPostsViewModel
     @State private var selectedPost: Post?
     @State private var showingPostDetail = false
-    @State private var scrollPosition: Int?
+    @State private var scrollPosition: UUID?
 
     var body: some View {
         VStack(spacing: 12) {
-            // ハンドル
-            Capsule()
-                .fill(.secondary)
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-
-            HStack {
-                Text("近くの投稿")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-
-                Spacer()
-
-                if viewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                }
-            }
-            .padding(.horizontal)
-
             // 横スクロールカルーセル
             if viewModel.posts.isEmpty && !viewModel.isLoading {
                 emptyStateView
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 16) {
-                        ForEach(Array(viewModel.posts.enumerated()), id: \.element.id) { index, post in
-                            let _ = print("🎨 [ContentView] 投稿を表示: \(post.id) - \(post.content.prefix(30))...")
+                        ForEach(viewModel.posts) { post in
                             CarouselPostCardView(
                                 post: post,
                                 isSelected: selectedPost?.id == post.id,
                                 onTap: {
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                         selectedPost = post
-                                        scrollPosition = index
+                                        scrollPosition = post.id
                                     }
                                     showingPostDetail = true
                                 },
@@ -149,7 +128,7 @@ struct PostListBottomSheet: View {
                                     // TODO: 地図の位置を移動
                                 }
                             )
-                            .id(index)
+                            .id(post.id)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -161,9 +140,6 @@ struct PostListBottomSheet: View {
                 .frame(height: 240)
             }
         }
-        .frame(height: 300)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal)
         .sheet(isPresented: $showingPostDetail) {
             if let post = selectedPost {
                 // TODO: PostDetailViewを実装
@@ -171,7 +147,7 @@ struct PostListBottomSheet: View {
             }
         }
         .onAppear {
-            print("👀 [ContentView] PostListBottomSheet.onAppear - viewModel.posts.count: \(viewModel.posts.count)")
+            AppLogger.debug("PostListBottomSheet.onAppear - viewModel.posts.count: \(viewModel.posts.count)")
             viewModel.fetchNearbyPosts()
         }
     }
@@ -195,7 +171,7 @@ struct PostListBottomSheet: View {
 // PostCardView は NearbyPostCardView.swift に移動しました
 
 struct PostFeedView: View {
-    @StateObject private var viewModel = NearbyPostsViewModel()
+    @EnvironmentObject private var viewModel: NearbyPostsViewModel
     @State private var selectedPost: Post?
     @State private var showingPostDetail = false
 
@@ -288,6 +264,9 @@ struct EmergencyView: View {
 }
 
 struct ProfileView: View {
+    @EnvironmentObject var authService: AuthService
+    @State private var showLogoutAlert = false
+
     var body: some View {
         VStack(spacing: 20) {
             // プロフィール画像
@@ -295,55 +274,105 @@ struct ProfileView: View {
                 .fill(.gray.opacity(0.3))
                 .frame(width: 100, height: 100)
                 .overlay {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.secondary)
+                    if let avatarURL = authService.currentUser?.avatarURL,
+                       let url = URL(string: avatarURL) {
+                        CachedAsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 40))
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            
+                .clipShape(Circle())
+
             VStack(spacing: 8) {
-                Text("ユーザー名")
+                Text(authService.currentUser?.displayName ?? authService.currentUser?.username ?? "ユーザー名")
                     .font(.title2)
                     .fontWeight(.semibold)
-                
-                Text("@username")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+
+                if let username = authService.currentUser?.username {
+                    Text("@\(username)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let email = authService.currentUser?.email {
+                    Text(email)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            
+
             HStack(spacing: 20) {
                 VStack {
                     Text("投稿")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("42")
+                    Text("0")
                         .font(.title3)
                         .fontWeight(.semibold)
                 }
-                
+
                 VStack {
                     Text("フォロワー")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("128")
+                    Text("0")
                         .font(.title3)
                         .fontWeight(.semibold)
                 }
-                
+
                 VStack {
                     Text("フォロー中")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("67")
+                    Text("0")
                         .font(.title3)
                         .fontWeight(.semibold)
                 }
             }
-            
+
+            // ログアウトボタン
+            Button(action: {
+                showLogoutAlert = true
+            }) {
+                HStack {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                    Text("ログアウト")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .foregroundColor(.white)
+                .background(Color.red)
+                .cornerRadius(12)
+            }
+            .padding(.horizontal, 30)
+            .padding(.top, 20)
+
             Spacer()
         }
         .padding()
         .navigationTitle("プロフィール")
         .navigationBarTitleDisplayMode(.large)
+        .alert("ログアウト", isPresented: $showLogoutAlert) {
+            Button("キャンセル", role: .cancel) {}
+            Button("ログアウト", role: .destructive) {
+                Task {
+                    await authService.signOut()
+                }
+            }
+        } message: {
+            Text("本当にログアウトしますか？")
+        }
     }
 }
 
@@ -358,7 +387,7 @@ struct PostDetailSheet: View {
                 VStack(alignment: .leading, spacing: 20) {
                     // User Info Section
                     HStack(spacing: 12) {
-                        AsyncImage(url: URL(string: post.user.avatarURL ?? "")) { image in
+                        CachedAsyncImage(url: URL(string: post.user.avatarURL ?? "")) { image in
                             image
                                 .resizable()
                                 .scaledToFill()

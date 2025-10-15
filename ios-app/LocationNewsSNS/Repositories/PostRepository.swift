@@ -29,7 +29,7 @@ class PostRepository: PostRepositoryProtocol {
     private let supabase = SupabaseConfig.shared.client
 
     nonisolated func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double) async throws -> [Post] {
-        print("🗄️ [PostRepository] fetchNearbyPosts - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
+        AppLogger.debug("fetchNearbyPosts - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
         // PostGIS nearby_posts_with_user RPC関数を使用した近隣検索
         // radiusはすでにメートル単位で渡されているので、そのまま使用
         let radiusMeters = Int(radius)
@@ -49,16 +49,16 @@ class PostRepository: PostRepositoryProtocol {
             max_results: 50
         )
 
-        print("🗄️ [PostRepository] RPC呼び出し - params: \(params)")
+        AppLogger.debug("RPC呼び出し - params: \(params)")
 
         let response: [NearbyPostResponse] = try await supabase
             .rpc("nearby_posts_with_user", params: params)
             .execute()
             .value
 
-        print("✅ [PostRepository] RPC レスポンス: \(response.count) 件")
+        AppLogger.debug("RPC レスポンス: \(response.count) 件")
         let posts = try response.map { try $0.toPost() }
-        print("✅ [PostRepository] Post変換完了: \(posts.count) 件")
+        AppLogger.debug("Post変換完了: \(posts.count) 件")
         return posts
     }
     
@@ -702,7 +702,7 @@ struct NearbyPostResponse: Decodable {
 
         guard let createdDate = dateFormatter.date(from: createdAt),
               let updatedDate = dateFormatter.date(from: updatedAt) else {
-            print("❌ [NearbyPostResponse] 日付パースエラー - createdAt: \(createdAt), updatedAt: \(updatedAt)")
+            AppLogger.error("日付パースエラー - createdAt: \(createdAt), updatedAt: \(updatedAt)")
             throw RepositoryError.invalidDateFormat
         }
 

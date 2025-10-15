@@ -6,6 +6,8 @@ import UIKit
 /// 投稿作成リクエスト
 struct CreatePostRequest: Codable {
     let content: String
+    let url: String?
+    let urlMetadata: URLMetadata?
     let latitude: Double?
     let longitude: Double?
     let locationName: String?
@@ -14,9 +16,11 @@ struct CreatePostRequest: Codable {
     let emergencyLevel: EmergencyLevel?
     let tags: [String]?
     let images: [UIImage] // エンコードされない
-    
+
     enum CodingKeys: String, CodingKey {
         case content
+        case url
+        case urlMetadata = "url_metadata"
         case latitude
         case longitude
         case locationName = "location_name"
@@ -25,9 +29,23 @@ struct CreatePostRequest: Codable {
         case emergencyLevel = "emergency_level"
         case tags
     }
-    
-    init(content: String, latitude: Double? = nil, longitude: Double? = nil, locationName: String? = nil, visibility: PostVisibility = .public, allowComments: Bool = true, emergencyLevel: EmergencyLevel? = nil, tags: [String]? = nil, images: [UIImage] = []) {
+
+    init(
+        content: String,
+        url: String? = nil,
+        urlMetadata: URLMetadata? = nil,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        locationName: String? = nil,
+        visibility: PostVisibility = .public,
+        allowComments: Bool = true,
+        emergencyLevel: EmergencyLevel? = nil,
+        tags: [String]? = nil,
+        images: [UIImage] = []
+    ) {
         self.content = content
+        self.url = url
+        self.urlMetadata = urlMetadata
         self.latitude = latitude
         self.longitude = longitude
         self.locationName = locationName
@@ -37,11 +55,13 @@ struct CreatePostRequest: Codable {
         self.tags = tags
         self.images = images
     }
-    
+
     // Codable conformance for properties other than images
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(url, forKey: .url)
+        try container.encodeIfPresent(urlMetadata, forKey: .urlMetadata)
         try container.encodeIfPresent(latitude, forKey: .latitude)
         try container.encodeIfPresent(longitude, forKey: .longitude)
         try container.encodeIfPresent(locationName, forKey: .locationName)
@@ -50,10 +70,12 @@ struct CreatePostRequest: Codable {
         try container.encodeIfPresent(emergencyLevel, forKey: .emergencyLevel)
         try container.encodeIfPresent(tags, forKey: .tags)
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         content = try container.decode(String.self, forKey: .content)
+        url = try container.decodeIfPresent(String.self, forKey: .url)
+        urlMetadata = try container.decodeIfPresent(URLMetadata.self, forKey: .urlMetadata)
         latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
         longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
         locationName = try container.decodeIfPresent(String.self, forKey: .locationName)

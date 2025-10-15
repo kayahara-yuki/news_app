@@ -20,8 +20,10 @@ class SocialService: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var followChannel: RealtimeChannel?
     
-    init(socialRepository: SocialRepositoryProtocol = SocialRepository()) {
-        self.socialRepository = socialRepository
+    init(socialRepository: SocialRepositoryProtocol? = nil, authService: AuthService? = nil) {
+        // AuthServiceから現在のユーザーIDを取得
+        let currentUserID = authService?.currentUser?.id ?? UUID()
+        self.socialRepository = socialRepository ?? SocialRepository(currentUserID: currentUserID)
         self.realtimeService = RealtimeService()
         setupRealtimeSubscriptions()
     }

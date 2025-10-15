@@ -110,7 +110,7 @@ struct CommentsView: View {
             HStack(spacing: 12) {
                 // ユーザーアバター
                 if let avatarURL = authService.currentUser?.avatarURL {
-                    AsyncImage(url: URL(string: avatarURL)) { image in
+                    CachedAsyncImage(url: URL(string: avatarURL)) { image in
                         image
                             .resizable()
                             .scaledToFill()
@@ -295,7 +295,7 @@ struct CommentRowView: View {
         HStack(alignment: .top, spacing: 12) {
             // ユーザーアバター
             if let avatarURL = comment.user.avatarURL {
-                AsyncImage(url: URL(string: avatarURL)) { image in
+                CachedAsyncImage(url: URL(string: avatarURL)) { image in
                     image
                         .resizable()
                         .scaledToFill()
@@ -447,7 +447,7 @@ struct ReplyRowView: View {
         HStack(alignment: .top, spacing: 8) {
             // 小さなアバター
             if let avatarURL = reply.user.avatarURL {
-                AsyncImage(url: URL(string: avatarURL)) { image in
+                CachedAsyncImage(url: URL(string: avatarURL)) { image in
                     image
                         .resizable()
                         .scaledToFill()
@@ -583,7 +583,7 @@ struct ReplyCommentView: View {
             
             HStack(alignment: .top, spacing: 12) {
                 if let avatarURL = parentComment.user.avatarURL {
-                    AsyncImage(url: URL(string: avatarURL)) { image in
+                    CachedAsyncImage(url: URL(string: avatarURL)) { image in
                         image
                             .resizable()
                             .scaledToFill()

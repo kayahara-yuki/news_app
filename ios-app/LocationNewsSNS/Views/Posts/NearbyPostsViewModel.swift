@@ -13,31 +13,34 @@ class NearbyPostsViewModel: ObservableObject {
     private let dependencies = DependencyContainer.shared
     private var cancellables = Set<AnyCancellable>()
 
+    // パフォーマンス最適化: 最後のフェッチ位置を記録
+    private var lastFetchLocation: CLLocation?
+    private let minimumFetchDistance: Double = 500 // 500m以上移動したらフェッチ
+
     init() {
         setupBindings()
+    }
+
+    deinit {
+        cancellables.removeAll()
+        AppLogger.debug("deinit called")
     }
 
     // MARK: - Setup
 
     private func setupBindings() {
-        // PostServiceの投稿リストを監視（PostServiceが具体的な実装であることを確認）
-        if let postService = dependencies.postService as? PostService {
-            postService.$nearbyPosts
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] posts in
-                    self?.posts = posts
-                }
-                .store(in: &cancellables)
-        }
+        // パフォーマンス最適化: PostServiceから直接監視するのではなく、
+        // 位置更新時のみ明示的にフェッチする方式に変更（二重Publisher構造を解消）
 
         // LocationServiceの位置情報を監視して自動更新
+        // パフォーマンス最適化: debounce時間を10秒に延長
         if let locationService = dependencies.locationService as? LocationService {
             locationService.$currentLocation
                 .compactMap { $0 }
-                .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
+                .debounce(for: .seconds(10), scheduler: DispatchQueue.main)
                 .sink { [weak self] location in
                     Task {
-                        await self?.fetchNearbyPostsForLocation(location)
+                        await self?.fetchNearbyPostsIfNeeded(location)
                     }
                 }
                 .store(in: &cancellables)
@@ -47,9 +50,9 @@ class NearbyPostsViewModel: ObservableObject {
     // MARK: - Fetch Methods
 
     func fetchNearbyPosts() {
-        print("🔍 [NearbyPostsViewModel] fetchNearbyPosts() called")
+        AppLogger.debug("fetchNearbyPosts() called")
         guard let location = dependencies.locationService.currentLocation else {
-            print("⚠️ [NearbyPostsViewModel] 位置情報がない - デフォルト位置（東京駅）を使用")
+            AppLogger.info("位置情報がない - デフォルト位置（東京駅）を使用")
             // 位置情報がない場合はデフォルト位置（東京駅）を使用
             Task {
                 await fetchNearbyPostsForCoordinate(
@@ -61,7 +64,7 @@ class NearbyPostsViewModel: ObservableObject {
             return
         }
 
-        print("✅ [NearbyPostsViewModel] 位置情報あり: lat=\(location.coordinate.latitude), lng=\(location.coordinate.longitude)")
+        AppLogger.debug("位置情報あり: lat=\(location.coordinate.latitude), lng=\(location.coordinate.longitude)")
         Task {
             await fetchNearbyPostsForLocation(location)
         }
@@ -85,6 +88,26 @@ class NearbyPostsViewModel: ObservableObject {
         isLoading = false
     }
 
+    // パフォーマンス最適化: 距離条件付きフェッチ
+    private func fetchNearbyPostsIfNeeded(_ location: CLLocation) async {
+        // 最後のフェッチ位置がない場合は必ずフェッチ
+        guard let lastLocation = lastFetchLocation else {
+            lastFetchLocation = location
+            await fetchNearbyPostsForLocation(location)
+            return
+        }
+
+        // 最後のフェッチ位置から500m以上移動した場合のみフェッチ
+        let distance = location.distance(from: lastLocation)
+        if distance >= minimumFetchDistance {
+            AppLogger.debug("移動距離: \(Int(distance))m - データフェッチを実行")
+            lastFetchLocation = location
+            await fetchNearbyPostsForLocation(location)
+        } else {
+            AppLogger.debug("移動距離: \(Int(distance))m - フェッチをスキップ（最小距離: \(Int(minimumFetchDistance))m）")
+        }
+    }
+
     private func fetchNearbyPostsForLocation(_ location: CLLocation) async {
         await fetchNearbyPostsForCoordinate(
             latitude: location.coordinate.latitude,
@@ -98,7 +121,7 @@ class NearbyPostsViewModel: ObservableObject {
         longitude: Double,
         radius: Double
     ) async {
-        print("📍 [NearbyPostsViewModel] fetchNearbyPostsForCoordinate - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
+        AppLogger.debug("fetchNearbyPostsForCoordinate - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
         do {
             isLoading = true
             errorMessage = nil
@@ -109,12 +132,12 @@ class NearbyPostsViewModel: ObservableObject {
                 radius: radius
             )
 
-            print("✅ [NearbyPostsViewModel] データ取得完了")
+            AppLogger.debug("データ取得完了")
 
             // 距離を計算して設定
             let userLocation = CLLocation(latitude: latitude, longitude: longitude)
             if let postService = dependencies.postService as? PostService {
-                print("📊 [NearbyPostsViewModel] PostServiceから取得した投稿数: \(postService.nearbyPosts.count)")
+                AppLogger.debug("PostServiceから取得した投稿数: \(postService.nearbyPosts.count)")
                 posts = postService.nearbyPosts.map { post in
                     var updatedPost = post
                     if let postLocation = post.location {
@@ -123,14 +146,14 @@ class NearbyPostsViewModel: ObservableObject {
                     }
                     return updatedPost
                 }
-                print("📊 [NearbyPostsViewModel] ViewModelに設定した投稿数: \(posts.count)")
+                AppLogger.debug("ViewModelに設定した投稿数: \(posts.count)")
             } else {
-                print("❌ [NearbyPostsViewModel] PostServiceのキャストに失敗")
+                AppLogger.error("PostServiceのキャストに失敗")
             }
 
             isLoading = false
         } catch {
-            print("❌ [NearbyPostsViewModel] エラー: \(error.localizedDescription)")
+            AppLogger.error("エラー: \(error.localizedDescription)")
             errorMessage = "投稿の取得に失敗しました: \(error.localizedDescription)"
             isLoading = false
         }

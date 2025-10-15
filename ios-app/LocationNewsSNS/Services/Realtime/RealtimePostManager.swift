@@ -34,7 +34,16 @@ class RealtimePostManager: ObservableObject {
 
         setupBindings()
     }
-    
+
+    deinit {
+        // Main Actor分離されたメソッドを非同期で呼び出し
+        Task { @MainActor in
+            self.stopMonitoring()
+        }
+        cancellables.removeAll()
+        AppLogger.debug("deinit called")
+    }
+
     // MARK: - Setup
     
     private func setupBindings() {

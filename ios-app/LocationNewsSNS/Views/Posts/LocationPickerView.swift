@@ -46,7 +46,7 @@ struct LocationPickerView: View {
                     .disabled(locationService.currentLocation == nil)
             )
         }
-        .onAppear {
+        .task {
             setupInitialLocation()
         }
         .onChange(of: searchText) { _, newValue in

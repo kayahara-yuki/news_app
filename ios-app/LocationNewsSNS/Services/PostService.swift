@@ -19,6 +19,17 @@ class PostService: ObservableObject, PostServiceProtocol {
         self.postRepository = postRepository
         setupRealtimeSubscription()
     }
+
+    deinit {
+        cancellables.removeAll()
+        // Main Actor分離されたメソッドを非同期で呼び出し
+        if let manager = realtimePostManager {
+            Task { @MainActor in
+                manager.stopMonitoring()
+            }
+        }
+        AppLogger.debug("deinit called")
+    }
     
     // MARK: - リアルタイム更新
     
@@ -196,15 +207,20 @@ class PostService: ObservableObject, PostServiceProtocol {
     }
     
     // MARK: - Private Methods
-    
+
+    // パフォーマンス最適化: 重複コードを削減し、効率的な更新を実現
     private func updateLocalPostLikeCount(postID: UUID, increment: Bool) {
-        // nearbyPostsを更新
-        if let index = nearbyPosts.firstIndex(where: { $0.id == postID }) {
-            let updatedPost = nearbyPosts[index]
+        // ヘルパー関数: Post配列内の特定IDの投稿のいいね数を更新
+        func updatePostInArray(_ array: inout [Post], postID: UUID, increment: Bool) -> Bool {
+            guard let index = array.firstIndex(where: { $0.id == postID }) else {
+                return false
+            }
+
+            let updatedPost = array[index]
             let newLikeCount = increment ? updatedPost.likeCount + 1 : max(0, updatedPost.likeCount - 1)
 
             // Postは値型なので、新しいインスタンスを作成
-            let newPost = Post(
+            array[index] = Post(
                 id: updatedPost.id,
                 user: updatedPost.user,
                 content: updatedPost.content,
@@ -222,35 +238,11 @@ class PostService: ObservableObject, PostServiceProtocol {
                 createdAt: updatedPost.createdAt,
                 updatedAt: updatedPost.updatedAt
             )
-
-            nearbyPosts[index] = newPost
+            return true
         }
 
-        // postsも更新
-        if let index = posts.firstIndex(where: { $0.id == postID }) {
-            let updatedPost = posts[index]
-            let newLikeCount = increment ? updatedPost.likeCount + 1 : max(0, updatedPost.likeCount - 1)
-
-            let newPost = Post(
-                id: updatedPost.id,
-                user: updatedPost.user,
-                content: updatedPost.content,
-                url: updatedPost.url,
-                latitude: updatedPost.latitude,
-                longitude: updatedPost.longitude,
-                address: updatedPost.address,
-                category: updatedPost.category,
-                visibility: updatedPost.visibility,
-                isUrgent: updatedPost.isUrgent,
-                isVerified: updatedPost.isVerified,
-                likeCount: newLikeCount,
-                commentCount: updatedPost.commentCount,
-                shareCount: updatedPost.shareCount,
-                createdAt: updatedPost.createdAt,
-                updatedAt: updatedPost.updatedAt
-            )
-
-            posts[index] = newPost
-        }
+        // nearbyPostsとpostsを更新
+        updatePostInArray(&nearbyPosts, postID: postID, increment: increment)
+        updatePostInArray(&posts, postID: postID, increment: increment)
     }
 }

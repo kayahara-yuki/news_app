@@ -219,24 +219,6 @@ struct MapContainerView: View {
 
                 Spacer()
 
-                // 近くの投稿カルーセル
-                NearbyPostsCarouselView(
-                    posts: $viewModel.nearbyPosts,
-                    selectedPost: $selectedPost,
-                    onPostTapped: { post in
-                        selectedPost = post
-                        showingPostDetail = true
-                    },
-                    onLocationTapped: { coordinate in
-                        withAnimation {
-                            region = MKCoordinateRegion(
-                                center: coordinate,
-                                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                            )
-                        }
-                    }
-                )
-
                 // 現在地ボタン
                 HStack {
                     Spacer()
@@ -250,6 +232,31 @@ struct MapContainerView: View {
                     .padding()
                 }
             }
+
+            // 近くの投稿カルーセル（最上位レイヤー、画面下部に固定）
+            NearbyPostsCarouselView(
+                posts: $viewModel.nearbyPosts,
+                selectedPost: $selectedPost,
+                onPostTapped: { post in
+                    selectedPost = post
+                    showingPostDetail = true
+                },
+                onLocationTapped: { coordinate in
+                    withAnimation {
+                        region = MKCoordinateRegion(
+                            center: coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                        )
+                    }
+                }
+            )
+            .background(
+                GeometryReader { geo in
+                    let _ = print("🟡 frame(maxHeight: .infinity) GEOMETRY - Size: \(geo.size), Frame: \(geo.frame(in: .global))")
+                    return Color.clear
+                }
+            )
+            .frame(maxHeight: .infinity, alignment: .bottom)
         }
         .sheet(isPresented: $showingPostDetail) {
             if let post = selectedPost {

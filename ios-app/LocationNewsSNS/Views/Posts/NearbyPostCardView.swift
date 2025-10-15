@@ -100,36 +100,17 @@ struct NearbyPostCardView: View {
 
     @ViewBuilder
     private func imageSection(imageUrl: String) -> some View {
-        AsyncImage(url: URL(string: imageUrl)) { phase in
-            switch phase {
-            case .empty:
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(height: 200)
-                    .overlay(ProgressView())
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 200)
-                    .clipped()
-            case .failure:
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(height: 200)
-                    .overlay(
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.largeTitle)
-                                .foregroundColor(.gray)
-                            Text("画像を読み込めません")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    )
-            @unknown default:
-                EmptyView()
-            }
+        CachedAsyncImage(url: URL(string: imageUrl)) { image in
+            image
+                .resizable()
+                .scaledToFill()
+                .frame(height: 200)
+                .clipped()
+        } placeholder: {
+            Rectangle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(height: 200)
+                .overlay(ProgressView())
         }
         .cornerRadius(8)
     }

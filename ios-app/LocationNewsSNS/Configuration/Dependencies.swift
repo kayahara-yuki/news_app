@@ -87,11 +87,14 @@ class DependencyContainer: ObservableObject {
     private lazy var _postRepository: PostRepositoryProtocol = PostRepository()
     private lazy var _emergencyRepository: EmergencyRepositoryProtocol = EmergencyRepository()
     
-    // MARK: - UseCase Protocols  
+    // MARK: - UseCase Protocols
     private lazy var _authUseCase: AuthUseCaseProtocol = AuthUseCase(authService: _authService, userRepository: _userRepository)
     private lazy var _postUseCase: PostUseCaseProtocol = PostUseCase(postService: _postService, postRepository: _postRepository)
     private lazy var _mapUseCase: MapUseCaseProtocol = MapUseCase(locationService: _locationService, postRepository: _postRepository)
     private lazy var _emergencyUseCase: EmergencyUseCaseProtocol = EmergencyUseCase(emergencyService: _emergencyService, emergencyRepository: _emergencyRepository)
+
+    // MARK: - ViewModels
+    private lazy var _nearbyPostsViewModel: NearbyPostsViewModel = NearbyPostsViewModel()
     
     private init() {
         setupDependencies()
@@ -136,11 +139,15 @@ class DependencyContainer: ObservableObject {
     var emergencyRepository: any EmergencyRepositoryProtocol { _emergencyRepository }
     
     // MARK: - UseCase Access
-    
+
     var authUseCase: any AuthUseCaseProtocol { _authUseCase }
     var postUseCase: any PostUseCaseProtocol { _postUseCase }
     var mapUseCase: any MapUseCaseProtocol { _mapUseCase }
     var emergencyUseCase: any EmergencyUseCaseProtocol { _emergencyUseCase }
+
+    // MARK: - ViewModel Access
+
+    var nearbyPostsViewModel: NearbyPostsViewModel { _nearbyPostsViewModel }
 }
 
 // MARK: - Additional Services
