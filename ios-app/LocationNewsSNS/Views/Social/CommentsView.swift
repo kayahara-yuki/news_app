@@ -131,7 +131,7 @@ struct CommentsView: View {
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .focused($isCommentFieldFocused)
                     .lineLimit(1...4)
-                    .onChange(of: newCommentText) { _, newValue in
+                    .onChange(of: newCommentText) { newValue in
                         if newValue.count > maxCommentLength {
                             newCommentText = String(newValue.prefix(maxCommentLength))
                         }
@@ -545,7 +545,7 @@ struct ReplyCommentView: View {
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .focused($isTextFieldFocused)
                         .lineLimit(3...8)
-                        .onChange(of: replyText) { _, newValue in
+                        .onChange(of: replyText) { newValue in
                             if newValue.count > maxReplyLength {
                                 replyText = String(newValue.prefix(maxReplyLength))
                             }

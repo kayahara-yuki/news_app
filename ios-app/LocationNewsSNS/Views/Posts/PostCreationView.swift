@@ -187,7 +187,7 @@ struct PostCreationView: View {
                 
                 TextEditor(text: $postContent)
                     .frame(minHeight: 100)
-                    .onChange(of: postContent) { _, newValue in
+                    .onChange(of: postContent) { newValue in
                         if newValue.count > maxContentLength {
                             postContent = String(newValue.prefix(maxContentLength))
                         }
@@ -232,7 +232,7 @@ struct PostCreationView: View {
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .keyboardType(.URL)
                     .autocapitalization(.none)
-                    .onChange(of: urlInput) { _, newValue in
+                    .onChange(of: urlInput) { newValue in
                         if !newValue.isEmpty && urlInput.contains("http") {
                             fetchURLMetadata(newValue)
                         } else if newValue.isEmpty {
@@ -293,7 +293,7 @@ struct PostCreationView: View {
                 )
             }
         }
-        .onChange(of: selectedPhotos) { _, newItems in
+        .onChange(of: selectedPhotos) { newItems in
             loadSelectedPhotos(newItems)
         }
     }

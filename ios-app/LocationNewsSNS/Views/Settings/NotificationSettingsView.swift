@@ -100,7 +100,7 @@ struct NotificationSettingsView: View {
     private var basicNotificationSection: some View {
         Section("基本通知") {
             Toggle("投稿通知", isOn: $notificationSettings.enablePostNotifications)
-                .onChange(of: notificationSettings.enablePostNotifications) { _, newValue in
+                .onChange(of: notificationSettings.enablePostNotifications) { newValue in
                     notificationManager.toggleNotificationType(.post, enabled: newValue)
                 }
             
@@ -125,17 +125,17 @@ struct NotificationSettingsView: View {
             }
             
             Toggle("いいね通知", isOn: $notificationSettings.enableLikeNotifications)
-                .onChange(of: notificationSettings.enableLikeNotifications) { _, newValue in
+                .onChange(of: notificationSettings.enableLikeNotifications) { newValue in
                     notificationManager.toggleNotificationType(.like, enabled: newValue)
                 }
             
             Toggle("コメント通知", isOn: $notificationSettings.enableCommentNotifications)
-                .onChange(of: notificationSettings.enableCommentNotifications) { _, newValue in
+                .onChange(of: notificationSettings.enableCommentNotifications) { newValue in
                     notificationManager.toggleNotificationType(.comment, enabled: newValue)
                 }
             
             Toggle("位置情報通知", isOn: $notificationSettings.enableLocationNotifications)
-                .onChange(of: notificationSettings.enableLocationNotifications) { _, newValue in
+                .onChange(of: notificationSettings.enableLocationNotifications) { newValue in
                     notificationManager.toggleNotificationType(.location, enabled: newValue)
                 }
         }

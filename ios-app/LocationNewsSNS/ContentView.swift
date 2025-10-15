@@ -11,10 +11,32 @@ struct ContentView: View {
     @State private var showingPostDetail = false
     @EnvironmentObject private var viewModel: NearbyPostsViewModel
 
+    init() {
+        // タブバーのアイコンとテキストの色を設定
+        let appearance = UITabBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.backgroundColor = .clear
+
+        // 非選択時を濃いグレーに（黒寄り）
+        appearance.stackedLayoutAppearance.normal.iconColor = .darkGray
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor.darkGray
+        ]
+
+        // 選択時を青色に
+        appearance.stackedLayoutAppearance.selected.iconColor = .systemBlue
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: UIColor.systemBlue
+        ]
+
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+
     var body: some View {
         TabView {
             // メイン地図画面
-            NavigationStack {
+            NavigationView {
                 ZStack {
                     // パフォーマンス最適化: カスタムMapAnnotationから標準Markerに変更
                     Map(coordinateRegion: $region, annotationItems: viewModel.posts) { post in
@@ -39,11 +61,24 @@ struct ContentView: View {
                     }
                     .ignoresSafeArea()
 
+                    // タブバーエリアを暗くするグラデーションオーバーレイ
+                    VStack {
+                        Spacer()
+                        LinearGradient(
+                            gradient: Gradient(colors: [.clear, .black.opacity(0.6)]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 100)
+                        .allowsHitTesting(false)
+                    }
+                    .ignoresSafeArea()
+
                     VStack {
                         Spacer()
 
                         // Liquid Glass エフェクトのボトムシート
-                        PostListBottomSheet(viewModel: viewModel)
+                        PostListBottomSheet(viewModel: viewModel, region: $region)
                     }
                 }
                 .navigationTitle("地図SNS")
@@ -67,42 +102,47 @@ struct ContentView: View {
                     }
                 }
             }
+            .navigationViewStyle(.stack)
             .tabItem {
                 Label("地図", systemImage: "map")
             }
-            
+
             // フィード画面
-            NavigationStack {
+            NavigationView {
                 PostFeedView()
             }
+            .navigationViewStyle(.stack)
             .tabItem {
                 Label("フィード", systemImage: "list.bullet")
             }
-            
+
             // 緊急情報画面
-            NavigationStack {
+            NavigationView {
                 EmergencyView()
             }
+            .navigationViewStyle(.stack)
             .tabItem {
                 Label("緊急", systemImage: "exclamationmark.triangle")
             }
-            
+
             // プロフィール画面
-            NavigationStack {
+            NavigationView {
                 ProfileView()
             }
+            .navigationViewStyle(.stack)
             .tabItem {
                 Label("プロフィール", systemImage: "person.circle")
             }
         }
+        .tabViewStyle(.automatic)
         .preferredColorScheme(.light)
     }
 }
 
 struct PostListBottomSheet: View {
     @ObservedObject var viewModel: NearbyPostsViewModel
+    @Binding var region: MKCoordinateRegion
     @State private var selectedPost: Post?
-    @State private var showingPostDetail = false
     @State private var scrollPosition: UUID?
 
     var body: some View {
@@ -118,14 +158,35 @@ struct PostListBottomSheet: View {
                                 post: post,
                                 isSelected: selectedPost?.id == post.id,
                                 onTap: {
+                                    // 位置情報を先に取得
+                                    let postLatitude = post.latitude
+                                    let postLongitude = post.longitude
+
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                         selectedPost = post
                                         scrollPosition = post.id
                                     }
-                                    showingPostDetail = true
+
+                                    // マップをピンの位置に移動
+                                    if let lat = postLatitude, let lng = postLongitude {
+                                        withAnimation {
+                                            region = MKCoordinateRegion(
+                                                center: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+                                                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                                            )
+                                        }
+                                    }
                                 },
                                 onLocationTap: {
-                                    // TODO: 地図の位置を移動
+                                    // 位置情報ボタンタップ時
+                                    if let lat = post.latitude, let lng = post.longitude {
+                                        withAnimation {
+                                            region = MKCoordinateRegion(
+                                                center: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+                                                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                                            )
+                                        }
+                                    }
                                 }
                             )
                             .id(post.id)
@@ -133,19 +194,11 @@ struct PostListBottomSheet: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .scrollTargetLayout()
                 }
-                .scrollPosition(id: $scrollPosition)
-                .scrollTargetBehavior(.viewAligned)
                 .frame(height: 240)
             }
         }
-        .sheet(isPresented: $showingPostDetail) {
-            if let post = selectedPost {
-                // TODO: PostDetailViewを実装
-                Text("投稿詳細: \(post.content)")
-            }
-        }
+        .background(Color.clear)
         .onAppear {
             AppLogger.debug("PostListBottomSheet.onAppear - viewModel.posts.count: \(viewModel.posts.count)")
             viewModel.fetchNearbyPosts()

@@ -49,7 +49,7 @@ struct LocationPickerView: View {
         .task {
             setupInitialLocation()
         }
-        .onChange(of: searchText) { _, newValue in
+        .onChange(of: searchText) { newValue in
             if !newValue.isEmpty {
                 searchLocations(query: newValue)
             } else {

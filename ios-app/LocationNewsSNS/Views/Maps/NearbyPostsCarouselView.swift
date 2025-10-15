@@ -39,8 +39,6 @@ struct NearbyPostsCarouselView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             carouselStack
         }
-        .scrollPosition(id: $scrollPosition)
-        .scrollTargetBehavior(.viewAligned)
         .frame(height: 200)
     }
 
@@ -52,7 +50,6 @@ struct NearbyPostsCarouselView: View {
             }
         }
         .padding(.horizontal, 16)
-        .scrollTargetLayout()
     }
 
     @ViewBuilder
@@ -65,6 +62,14 @@ struct NearbyPostsCarouselView: View {
                 selectedPost = post
                 scrollPosition = post.id
                 onPostTapped?(post)
+
+                // カード選択時にマップをピンの位置に移動
+                if let lat = post.latitude, let lng = post.longitude {
+                    onLocationTapped?(CLLocationCoordinate2D(
+                        latitude: lat,
+                        longitude: lng
+                    ))
+                }
             },
             onLocationTap: {
                 if let lat = post.latitude, let lng = post.longitude {
@@ -183,6 +188,7 @@ struct CarouselPostCardView: View {
                             }
                             .foregroundColor(.blue)
                         }
+                        .buttonStyle(.plain)
 
                         HStack(spacing: 4) {
                             Image(systemName: "tag.fill")
@@ -225,7 +231,7 @@ struct CarouselPostCardView: View {
             .frame(width: 280)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? Color.blue.opacity(0.15) : Color.white.opacity(0.95))
+                    .fill(isSelected ? Color.white.opacity(0.95) : Color.white.opacity(0.95))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16)

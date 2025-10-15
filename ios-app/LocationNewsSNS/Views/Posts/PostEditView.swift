@@ -185,7 +185,7 @@ struct PostEditView: View {
                 
                 TextEditor(text: $postContent)
                     .frame(minHeight: 120)
-                    .onChange(of: postContent) { _, newValue in
+                    .onChange(of: postContent) { newValue in
                         if newValue.count > maxContentLength {
                             postContent = String(newValue.prefix(maxContentLength))
                         }
@@ -259,7 +259,7 @@ struct PostEditView: View {
                 )
             }
         }
-        .onChange(of: selectedPhotos) { _, newItems in
+        .onChange(of: selectedPhotos) { newItems in
             loadSelectedPhotos(newItems)
         }
     }

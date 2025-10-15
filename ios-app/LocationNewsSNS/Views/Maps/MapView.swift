@@ -123,7 +123,9 @@ struct MapView: UIViewRepresentable {
         mapView.showsBuildings = true
         mapView.isPitchEnabled = true
         mapView.isRotateEnabled = true
-        mapView.showsUserTrackingButton = showUserLocation
+        if #available(iOS 17.0, *) {
+            mapView.showsUserTrackingButton = showUserLocation
+        }
 
         // 新規投稿作成の通知を監視
         NotificationCenter.default.addObserver(

@@ -178,7 +178,7 @@ struct SignUpView: View {
         } message: {
             Text(viewModel.alertMessage)
         }
-        .onChange(of: viewModel.isAuthenticated) { _, isAuthenticated in
+        .onChange(of: viewModel.isAuthenticated) { isAuthenticated in
             if isAuthenticated {
                 dismiss()
             }
