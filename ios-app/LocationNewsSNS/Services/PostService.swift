@@ -28,7 +28,6 @@ class PostService: ObservableObject, PostServiceProtocol {
                 manager.stopMonitoring()
             }
         }
-        AppLogger.debug("deinit called")
     }
     
     // MARK: - リアルタイム更新
@@ -83,7 +82,6 @@ class PostService: ObservableObject, PostServiceProtocol {
     
     /// 近隣の投稿を取得
     func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double) async {
-        print("🌐 [PostService] fetchNearbyPosts called - lat: \(latitude), lng: \(longitude), radius: \(radius)")
         isLoading = true
         defer { isLoading = false }
 
@@ -94,12 +92,9 @@ class PostService: ObservableObject, PostServiceProtocol {
                 radius: radius
             )
 
-            print("✅ [PostService] Repository から \(posts.count) 件の投稿を取得")
-
             await MainActor.run {
                 self.nearbyPosts = posts
                 self.errorMessage = nil
-                print("✅ [PostService] nearbyPosts に \(posts.count) 件を設定完了")
             }
 
             // リアルタイム監視を開始
@@ -109,8 +104,7 @@ class PostService: ObservableObject, PostServiceProtocol {
             )
 
         } catch {
-            print("❌ [PostService] エラー: \(error)")
-            print("投稿取得エラー: \(error)")
+            AppLogger.error("投稿取得エラー: \(error)")
             await MainActor.run {
                 self.errorMessage = "投稿の取得に失敗しました: \(error.localizedDescription)"
             }

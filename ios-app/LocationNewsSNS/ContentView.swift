@@ -3,13 +3,17 @@ import MapKit
 
 struct ContentView: View {
     @State private var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 35.6762, longitude: 139.6503), // 東京駅
+        center: CLLocationCoordinate2D(latitude: 35.6812, longitude: 139.7671), // 東京駅
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
     @State private var showingPostCreation = false
     @State private var selectedPost: Post?
     @State private var showingPostDetail = false
     @EnvironmentObject private var viewModel: NearbyPostsViewModel
+
+    // マップスクロール監視用
+    @State private var lastFetchedCoordinate: CLLocationCoordinate2D?
+    @State private var fetchTask: Task<Void, Never>?
 
     init() {
         // タブバーのアイコンとテキストの色を設定
@@ -41,8 +45,8 @@ struct ContentView: View {
                     // パフォーマンス最適化: カスタムMapAnnotationから標準Markerに変更
                     Map(coordinateRegion: $region, annotationItems: viewModel.posts) { post in
                         MapAnnotation(coordinate: CLLocationCoordinate2D(
-                            latitude: post.latitude ?? 35.6762,
-                            longitude: post.longitude ?? 139.6503
+                            latitude: post.latitude ?? 35.6812,
+                            longitude: post.longitude ?? 139.7671
                         )) {
                             // 簡素化されたアノテーションビュー
                             Image(systemName: post.isUrgent ? "exclamationmark.triangle.fill" : "mappin.circle.fill")
@@ -60,6 +64,12 @@ struct ContentView: View {
                         }
                     }
                     .ignoresSafeArea()
+                    .onChange(of: region.center.latitude) { _ in
+                        onMapRegionChanged(newCoordinate: region.center)
+                    }
+                    .onChange(of: region.center.longitude) { _ in
+                        onMapRegionChanged(newCoordinate: region.center)
+                    }
 
                     // タブバーエリアを暗くするグラデーションオーバーレイ
                     VStack {
@@ -137,6 +147,41 @@ struct ContentView: View {
         .tabViewStyle(.automatic)
         .preferredColorScheme(.light)
     }
+
+    // MARK: - Map Region Changed
+
+    private func onMapRegionChanged(newCoordinate: CLLocationCoordinate2D) {
+        // 前回の取得位置から十分離れているかチェック（約500m以上）
+        if let lastCoordinate = lastFetchedCoordinate {
+            let distance = newCoordinate.distance(to: lastCoordinate)
+            if distance < 500 { // 500m未満の移動は無視
+                return
+            }
+        }
+
+        // 既存のタスクをキャンセル
+        fetchTask?.cancel()
+
+        // デバウンス処理: 1秒後に実行
+        fetchTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000) // 1秒
+            } catch {
+                return // キャンセルされた場合は終了
+            }
+
+            guard !Task.isCancelled else { return }
+
+            // 新しい座標で投稿を取得
+            await viewModel.fetchNearbyPostsForCoordinate(
+                latitude: newCoordinate.latitude,
+                longitude: newCoordinate.longitude,
+                radius: 5000 // 5km
+            )
+
+            lastFetchedCoordinate = newCoordinate
+        }
+    }
 }
 
 struct PostListBottomSheet: View {
@@ -194,7 +239,6 @@ struct PostListBottomSheet: View {
         }
         .background(Color.clear)
         .onAppear {
-            AppLogger.debug("PostListBottomSheet.onAppear - viewModel.posts.count: \(viewModel.posts.count)")
             viewModel.fetchNearbyPosts()
         }
     }

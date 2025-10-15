@@ -23,7 +23,6 @@ class NearbyPostsViewModel: ObservableObject {
 
     deinit {
         cancellables.removeAll()
-        AppLogger.debug("deinit called")
     }
 
     // MARK: - Setup
@@ -50,9 +49,7 @@ class NearbyPostsViewModel: ObservableObject {
     // MARK: - Fetch Methods
 
     func fetchNearbyPosts() {
-        AppLogger.debug("fetchNearbyPosts() called")
         guard let location = dependencies.locationService.currentLocation else {
-            AppLogger.info("位置情報がない - デフォルト位置（東京駅）を使用")
             // 位置情報がない場合はデフォルト位置（東京駅）を使用
             Task {
                 await fetchNearbyPostsForCoordinate(
@@ -64,7 +61,6 @@ class NearbyPostsViewModel: ObservableObject {
             return
         }
 
-        AppLogger.debug("位置情報あり: lat=\(location.coordinate.latitude), lng=\(location.coordinate.longitude)")
         Task {
             await fetchNearbyPostsForLocation(location)
         }
@@ -100,11 +96,8 @@ class NearbyPostsViewModel: ObservableObject {
         // 最後のフェッチ位置から500m以上移動した場合のみフェッチ
         let distance = location.distance(from: lastLocation)
         if distance >= minimumFetchDistance {
-            AppLogger.debug("移動距離: \(Int(distance))m - データフェッチを実行")
             lastFetchLocation = location
             await fetchNearbyPostsForLocation(location)
-        } else {
-            AppLogger.debug("移動距離: \(Int(distance))m - フェッチをスキップ（最小距離: \(Int(minimumFetchDistance))m）")
         }
     }
 
@@ -116,12 +109,11 @@ class NearbyPostsViewModel: ObservableObject {
         )
     }
 
-    private func fetchNearbyPostsForCoordinate(
+    func fetchNearbyPostsForCoordinate(
         latitude: Double,
         longitude: Double,
         radius: Double
     ) async {
-        AppLogger.debug("fetchNearbyPostsForCoordinate - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
         do {
             isLoading = true
             errorMessage = nil
@@ -132,12 +124,9 @@ class NearbyPostsViewModel: ObservableObject {
                 radius: radius
             )
 
-            AppLogger.debug("データ取得完了")
-
             // 距離を計算して設定
             let userLocation = CLLocation(latitude: latitude, longitude: longitude)
             if let postService = dependencies.postService as? PostService {
-                AppLogger.debug("PostServiceから取得した投稿数: \(postService.nearbyPosts.count)")
                 posts = postService.nearbyPosts.map { post in
                     var updatedPost = post
                     if let postLocation = post.location {
@@ -146,7 +135,6 @@ class NearbyPostsViewModel: ObservableObject {
                     }
                     return updatedPost
                 }
-                AppLogger.debug("ViewModelに設定した投稿数: \(posts.count)")
             } else {
                 AppLogger.error("PostServiceのキャストに失敗")
             }
