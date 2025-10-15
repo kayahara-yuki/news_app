@@ -15,6 +15,9 @@ struct ContentView: View {
     @State private var lastFetchedCoordinate: CLLocationCoordinate2D?
     @State private var fetchTask: Task<Void, Never>?
 
+    // 検索範囲の半径（メートル単位）
+    @State private var selectedRadius: Double = 2000 // デフォルト2km
+
     init() {
         // タブバーのアイコンとテキストの色を設定
         let appearance = UITabBarAppearance()
@@ -63,12 +66,44 @@ struct ContentView: View {
                                 }
                         }
                     }
+                    .overlay(
+                        // 選択された範囲の円を表示
+                        MapCircleOverlay(center: region.center, radius: selectedRadius, span: region.span)
+                    )
                     .ignoresSafeArea()
                     .onChange(of: region.center.latitude) { _ in
                         onMapRegionChanged(newCoordinate: region.center)
                     }
                     .onChange(of: region.center.longitude) { _ in
                         onMapRegionChanged(newCoordinate: region.center)
+                    }
+                    .onChange(of: selectedRadius) { _ in
+                        // 範囲変更時に投稿を再取得
+                        onMapRegionChanged(newCoordinate: region.center)
+                    }
+
+                    // カスタムヘッダー（ナビゲーションバー不使用）
+                    VStack {
+                        HStack(alignment: .top) {
+                            // 左側: 距離選択ボタン
+                            RadiusSelectorView(selectedRadius: $selectedRadius)
+                                .padding(.leading, 16)
+
+                            Spacer()
+
+                            // 右側: 投稿作成ボタン
+                            Button(action: {
+                                showingPostCreation = true
+                            }) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.trailing, 16)
+                        }
+                        .padding(.top, 8)
+
+                        Spacer()
                     }
 
                     // タブバーエリアを暗くするグラデーションオーバーレイ
@@ -89,18 +124,6 @@ struct ContentView: View {
 
                         // Liquid Glass エフェクトのボトムシート
                         PostListBottomSheet(viewModel: viewModel, region: $region)
-                    }
-                }
-                .navigationTitle("地図SNS")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: {
-                            showingPostCreation = true
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                        }
                     }
                 }
                 .sheet(isPresented: $showingPostCreation) {
@@ -172,11 +195,11 @@ struct ContentView: View {
 
             guard !Task.isCancelled else { return }
 
-            // 新しい座標で投稿を取得
+            // 新しい座標で投稿を取得（選択された範囲で）
             await viewModel.fetchNearbyPostsForCoordinate(
                 latitude: newCoordinate.latitude,
                 longitude: newCoordinate.longitude,
-                radius: 5000 // 5km
+                radius: selectedRadius
             )
 
             lastFetchedCoordinate = newCoordinate
@@ -612,6 +635,116 @@ struct PostDetailSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Radius Selector View
+struct RadiusSelectorView: View {
+    @Binding var selectedRadius: Double
+    @State private var isExpanded: Bool = false
+
+    let radiusOptions: [Double] = [1000, 2000, 3000, 4000, 5000]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if isExpanded {
+                // 展開時: 全てのオプションを表示
+                ForEach(radiusOptions, id: \.self) { radius in
+                    Button(action: {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            selectedRadius = radius
+                            isExpanded = false
+                        }
+                    }) {
+                        Text("\(Int(radius / 1000))")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(selectedRadius == radius ? .white : .primary)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle()
+                                    .fill(selectedRadius == radius ? Color.blue : Color.white.opacity(0.3))
+                            )
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(selectedRadius == radius ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
+            } else {
+                // 折りたたみ時: 現在の選択値のみ表示
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        isExpanded = true
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "scope")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("\(Int(selectedRadius / 1000))km")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color.blue)
+                    )
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, isExpanded ? 12 : 0)
+        .padding(.vertical, isExpanded ? 8 : 0)
+    }
+}
+
+// MARK: - Map Circle Overlay
+struct MapCircleOverlay: View {
+    let center: CLLocationCoordinate2D
+    let radius: Double // メートル単位
+    let span: MKCoordinateSpan
+
+    var body: some View {
+        GeometryReader { geometry in
+            // 緯度1度あたりのメートル数（約111km）
+            let metersPerLatitudeDegree = 111000.0
+
+            // 経度1度あたりのメートル数（緯度によって変わる）
+            let metersPerLongitudeDegree = 111000.0 * cos(center.latitude * .pi / 180)
+
+            // 画面上でのスケール計算
+            let latitudeScale = geometry.size.height / (span.latitudeDelta * metersPerLatitudeDegree)
+            let longitudeScale = geometry.size.width / (span.longitudeDelta * metersPerLongitudeDegree)
+
+            // 平均スケールを使用（円形を保つため）
+            let averageScale = (latitudeScale + longitudeScale) / 2
+            let radiusInPoints = radius * averageScale
+
+            ZStack {
+                // 塗りつぶし
+                Circle()
+                    .fill(Color.blue.opacity(0.15))
+                    .frame(
+                        width: radiusInPoints * 2,
+                        height: radiusInPoints * 2
+                    )
+
+                // 境界線
+                Circle()
+                    .stroke(Color.blue.opacity(0.6), lineWidth: 3)
+                    .frame(
+                        width: radiusInPoints * 2,
+                        height: radiusInPoints * 2
+                    )
+            }
+            .position(
+                x: geometry.size.width / 2,
+                y: geometry.size.height / 2
+            )
+        }
+        .allowsHitTesting(false)
     }
 }
 
