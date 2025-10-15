@@ -151,13 +151,15 @@ struct PostListBottomSheet: View {
             if viewModel.posts.isEmpty && !viewModel.isLoading {
                 emptyStateView
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 16) {
-                        ForEach(viewModel.posts) { post in
-                            CarouselPostCardView(
-                                post: post,
-                                isSelected: selectedPost?.id == post.id,
-                                onTap: {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 16) {
+                            ForEach(viewModel.posts) { post in
+                                CarouselPostCardView(
+                                    post: post,
+                                    isSelected: selectedPost?.id == post.id
+                                )
+                                .onTapGesture {
                                     // 位置情報を先に取得
                                     let postLatitude = post.latitude
                                     let postLongitude = post.longitude
@@ -165,6 +167,9 @@ struct PostListBottomSheet: View {
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                         selectedPost = post
                                         scrollPosition = post.id
+
+                                        // カードを中央にスクロール
+                                        proxy.scrollTo(post.id, anchor: .center)
                                     }
 
                                     // マップをピンの位置に移動
@@ -176,26 +181,15 @@ struct PostListBottomSheet: View {
                                             )
                                         }
                                     }
-                                },
-                                onLocationTap: {
-                                    // 位置情報ボタンタップ時
-                                    if let lat = post.latitude, let lng = post.longitude {
-                                        withAnimation {
-                                            region = MKCoordinateRegion(
-                                                center: CLLocationCoordinate2D(latitude: lat, longitude: lng),
-                                                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                                            )
-                                        }
-                                    }
                                 }
-                            )
-                            .id(post.id)
+                                .id(post.id)
+                            }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .frame(height: 240)
                 }
-                .frame(height: 240)
             }
         }
         .background(Color.clear)

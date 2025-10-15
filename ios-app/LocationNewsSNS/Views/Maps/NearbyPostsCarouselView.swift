@@ -36,10 +36,27 @@ struct NearbyPostsCarouselView: View {
 
     @ViewBuilder
     private var carouselContent: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            carouselStack
+        if #available(iOS 17.0, *) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                carouselStack
+            }
+            .scrollPosition(id: $scrollPosition, anchor: .center)
+            .frame(height: 200)
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    carouselStack
+                }
+                .frame(height: 200)
+                .onChange(of: scrollPosition) { newValue in
+                    if let id = newValue {
+                        withAnimation {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
+                }
+            }
         }
-        .frame(height: 200)
     }
 
     @ViewBuilder
@@ -56,31 +73,22 @@ struct NearbyPostsCarouselView: View {
     private func carouselCard(for post: Post) -> some View {
         CarouselPostCardView(
             post: post,
-            isSelected: selectedPost?.id == post.id,
-            onTap: {
-                // パフォーマンス最適化: アニメーションを1箇所に統一（.animationモディファイアで制御）
-                selectedPost = post
-                scrollPosition = post.id
-                onPostTapped?(post)
-
-                // カード選択時にマップをピンの位置に移動
-                if let lat = post.latitude, let lng = post.longitude {
-                    onLocationTapped?(CLLocationCoordinate2D(
-                        latitude: lat,
-                        longitude: lng
-                    ))
-                }
-            },
-            onLocationTap: {
-                if let lat = post.latitude, let lng = post.longitude {
-                    onLocationTapped?(CLLocationCoordinate2D(
-                        latitude: lat,
-                        longitude: lng
-                    ))
-                }
-            }
+            isSelected: selectedPost?.id == post.id
         )
         .id(post.id)
+        .onTapGesture {
+            selectedPost = post
+            scrollPosition = post.id
+            onPostTapped?(post)
+
+            // カード選択時にマップをピンの位置に移動
+            if let lat = post.latitude, let lng = post.longitude {
+                onLocationTapped?(CLLocationCoordinate2D(
+                    latitude: lat,
+                    longitude: lng
+                ))
+            }
+        }
     }
 
     // MARK: - Empty State
@@ -111,14 +119,11 @@ struct NearbyPostsCarouselView: View {
 struct CarouselPostCardView: View {
     let post: Post
     let isSelected: Bool
-    let onTap: () -> Void
-    let onLocationTap: () -> Void
 
     @State private var showingFullImage = false
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
                 // 画像セクション（もし画像があれば）- mediaUrlsは削除されたためコメントアウト
                 // if let imageUrl = post.mediaUrls?.first {
                 if false { // 画像表示は将来実装
@@ -179,16 +184,13 @@ struct CarouselPostCardView: View {
 
                     // 位置情報とカテゴリ
                     HStack(spacing: 12) {
-                        Button(action: onLocationTap) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 10))
-                                Text(distanceText)
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.blue)
+                        HStack(spacing: 4) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 10))
+                            Text(distanceText)
+                                .font(.caption2)
                         }
-                        .buttonStyle(.plain)
+                        .foregroundColor(.blue)
 
                         HStack(spacing: 4) {
                             Image(systemName: "tag.fill")
@@ -239,9 +241,7 @@ struct CarouselPostCardView: View {
             )
             .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
             .scaleEffect(isSelected ? 1.02 : 1.0)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
     }
 
     // MARK: - Computed Properties

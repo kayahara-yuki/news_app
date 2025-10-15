@@ -283,28 +283,55 @@ struct MapContainerView: View {
             }
 
             // 近くの投稿カルーセル（最上位レイヤー、画面下部に固定）
-            NearbyPostsCarouselView(
-                posts: $viewModel.nearbyPosts,
-                selectedPost: $selectedPost,
-                onPostTapped: { post in
-                    selectedPost = post
-                    showingPostDetail = true
-                },
-                onLocationTapped: { coordinate in
-                    withAnimation {
-                        region = MKCoordinateRegion(
-                            center: coordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                        )
+            Group {
+                if !viewModel.nearbyPosts.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 16) {
+                            ForEach(viewModel.nearbyPosts) { post in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(post.content)
+                                        .font(.subheadline)
+                                        .lineLimit(2)
+
+                                    if let userName = post.userName {
+                                        Text(userName)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding()
+                                .frame(width: 280)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.white)
+                                        .shadow(radius: 4)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(selectedPost?.id == post.id ? Color.blue : Color.clear, lineWidth: 2)
+                                )
+                                .onTapGesture {
+                                    selectedPost = post
+                                    showingPostDetail = true
+
+                                    if let lat = post.latitude, let lng = post.longitude {
+                                        withAnimation {
+                                            region = MKCoordinateRegion(
+                                                center: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+                                                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                                            )
+                                        }
+                                    }
+                                }
+                                .id(post.id)
+                            }
+                        }
+                        .padding(.horizontal, 16)
                     }
+                    .frame(height: 200)
+                    .background(Color.white.opacity(0.9))
                 }
-            )
-            .background(
-                GeometryReader { geo in
-                    let _ = print("🟡 frame(maxHeight: .infinity) GEOMETRY - Size: \(geo.size), Frame: \(geo.frame(in: .global))")
-                    return Color.clear
-                }
-            )
+            }
             .frame(maxHeight: .infinity, alignment: .bottom)
         }
         .sheet(isPresented: $showingPostDetail) {
