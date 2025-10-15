@@ -152,8 +152,8 @@ struct MapView: UIViewRepresentable {
             mapView.setRegion(region, animated: true)
         }
 
-        // 10km圏内の円を表示
-        update10kmCircle(mapView: mapView)
+        // 5km圏内の円を表示
+        update5kmCircle(mapView: mapView)
 
         // アノテーションの更新
         updateAnnotations(mapView: mapView)
@@ -161,7 +161,7 @@ struct MapView: UIViewRepresentable {
     
     // MARK: - Private Methods
 
-    private func update10kmCircle(mapView: MKMapView) {
+    private func update5kmCircle(mapView: MKMapView) {
         // 既存の円オーバーレイを削除
         mapView.overlays.forEach { overlay in
             if overlay is MKCircle {
@@ -169,8 +169,8 @@ struct MapView: UIViewRepresentable {
             }
         }
 
-        // マップの中心座標に10km圏内の円を追加
-        let circle = MKCircle(center: region.center, radius: 10000) // 10km = 10000m
+        // マップの中心座標に5km圏内の円を追加
+        let circle = MKCircle(center: region.center, radius: 5000) // 5km = 5000m
         mapView.addOverlay(circle)
     }
 
