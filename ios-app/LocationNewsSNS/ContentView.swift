@@ -152,14 +152,35 @@ struct ContentView: View {
 
                             Spacer()
 
-                            // 右側: 投稿作成ボタン
-                            Button(action: {
-                                showingPostCreation = true
-                            }) {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.title2)
-                                    .foregroundColor(.blue)
+                            // 右側: 現在位置ボタン
+                            Button {
+                                // 現在位置にマップを移動
+                                if let currentLocation = locationService.currentLocation {
+                                    withAnimation {
+                                        region = MKCoordinateRegion(
+                                            center: currentLocation.coordinate,
+                                            span: defaultMapSpan
+                                        )
+                                    }
+
+                                    // ハプティックフィードバック
+                                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                    impactFeedback.impactOccurred()
+                                } else {
+                                    // 位置情報がない場合は許可をリクエスト
+                                    locationService.requestPermission()
+                                }
+                            } label: {
+                                Image(systemName: "location.fill")
+                                    .font(.system(size: 20, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(.blue)
+                                    .clipShape(Circle())
+                                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                             }
+                            .accessibilityLabel("現在位置に戻る")
+                            .accessibilityHint("マップを現在位置に移動します")
                             .padding(.trailing, 16)
                         }
                         .padding(.top, 8)
@@ -192,41 +213,36 @@ struct ContentView: View {
                         Spacer()
                     }
 
-                    // 現在位置に戻るボタン（右下角）
+                    // 新規投稿FABボタン（右下角）
                     VStack {
                         Spacer()
                         HStack {
                             Spacer()
                             Button {
-                                // 現在位置にマップを移動
-                                if let currentLocation = locationService.currentLocation {
-                                    withAnimation {
-                                        region = MKCoordinateRegion(
-                                            center: currentLocation.coordinate,
-                                            span: defaultMapSpan
-                                        )
-                                    }
+                                showingPostCreation = true
 
-                                    // ハプティックフィードバック
-                                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-                                    impactFeedback.impactOccurred()
-                                } else {
-                                    // 位置情報がない場合は許可をリクエスト
-                                    locationService.requestPermission()
-                                }
+                                // ハプティックフィードバック
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                impactFeedback.impactOccurred()
                             } label: {
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 20, weight: .medium))
+                                Image(systemName: "plus")
+                                    .font(.system(size: 24, weight: .bold))
                                     .foregroundColor(.white)
-                                    .frame(width: 44, height: 44)
-                                    .background(.blue)
+                                    .frame(width: 56, height: 56)
+                                    .background(
+                                        LinearGradient(
+                                            colors: [.blue, .blue.opacity(0.8)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
                                     .clipShape(Circle())
-                                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                                    .shadow(color: .blue.opacity(0.4), radius: 12, x: 0, y: 6)
                             }
-                            .accessibilityLabel("現在位置に戻る")
-                            .accessibilityHint("マップを現在位置に移動します")
+                            .accessibilityLabel("新規投稿")
+                            .accessibilityHint("新しい投稿を作成します")
                             .padding(.trailing, 16)
-                            .padding(.bottom, viewModel.posts.isEmpty ? 50 : 200)
+                            .padding(.bottom, viewModel.posts.isEmpty ? 30 : 200)
                         }
                     }
 
