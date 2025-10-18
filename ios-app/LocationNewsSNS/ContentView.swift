@@ -1,6 +1,9 @@
 import SwiftUI
 import MapKit
 
+// MARK: - Constants
+private let kPinFocusZoomSpan = MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+
 struct ContentView: View {
     // MARK: - Constants
     private let defaultMapSpan = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
@@ -15,6 +18,7 @@ struct ContentView: View {
     @State private var selectedPost: Post?
     @State private var showingPostDetail = false
     @State private var selectedPinPost: Post? // ピン選択時の吹き出し表示用
+    @State private var selectedCardPost: Post? // カード選択状態
     @EnvironmentObject private var viewModel: NearbyPostsViewModel
     @EnvironmentObject private var locationService: LocationService
 
@@ -59,44 +63,16 @@ struct ContentView: View {
                             latitude: post.latitude ?? 35.6812,
                             longitude: post.longitude ?? 139.7671
                         )) {
-                            ZStack {
-                                // ピン
-                                Image(systemName: post.isUrgent ? "exclamationmark.triangle.fill" : "mappin.circle.fill")
-                                    .font(.title2)
-                                    .foregroundColor(
-                                        selectedPinPost?.id == post.id ? .orange :
-                                        (post.isUrgent ? .red : .blue)
-                                    )
-                                    .background(
-                                        Circle()
-                                            .fill(.white)
-                                            .frame(width: 28, height: 28)
-                                    )
-                                    .scaleEffect(selectedPinPost?.id == post.id ? 2.0 : 1.0)
-                                    .onTapGesture {
-                                        withAnimation(springAnimation) {
-                                            if selectedPinPost?.id == post.id {
-                                                // 同じピンをタップしたら閉じる
-                                                selectedPinPost = nil
-                                            } else {
-                                                // 別のピンをタップしたら選択
-                                                selectedPinPost = post
-                                            }
-                                        }
-                                    }
-
-                                // 吹き出し（選択時のみ表示）
-                                if selectedPinPost?.id == post.id {
-                                    MapPinCalloutView(post: post) {
-                                        // 吹き出しタップで詳細画面を表示
-                                        selectedPost = post
-                                        showingPostDetail = true
-                                    }
-                                    .offset(y: -140) // ピンの上に配置（絶対位置）
-                                    .transition(.scale.combined(with: .opacity))
-                                    .zIndex(1)
-                                }
-                            }
+                            PostMapAnnotationContent(
+                                post: post,
+                                selectedPinPost: $selectedPinPost,
+                                selectedCardPost: $selectedCardPost,
+                                region: $region,
+                                selectedPost: $selectedPost,
+                                showingPostDetail: $showingPostDetail,
+                                springAnimation: springAnimation
+                            )
+                            .zIndex(selectedPinPost?.id == post.id ? 1000 : 0)
                         }
                     }
                     .overlay(
@@ -104,6 +80,12 @@ struct ContentView: View {
                         MapCircleOverlay(center: region.center, radius: selectedRadius, span: region.span)
                     )
                     .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(springAnimation) {
+                            selectedPinPost = nil
+                            selectedCardPost = nil
+                        }
+                    }
                     .onChange(of: region.center.latitude) { _ in
                         onMapRegionChanged(newCoordinate: region.center)
                     }
@@ -263,7 +245,7 @@ struct ContentView: View {
                         Spacer()
 
                         // Liquid Glass エフェクトのボトムシート
-                        PostListBottomSheet(viewModel: viewModel, region: $region, selectedPinPost: $selectedPinPost)
+                        PostListBottomSheet(viewModel: viewModel, region: $region, selectedPinPost: $selectedPinPost, selectedCardPost: $selectedCardPost)
                             .padding(.bottom, 16)
                     }
                 }
@@ -273,6 +255,8 @@ struct ContentView: View {
                 .sheet(isPresented: $showingPostDetail) {
                     if let post = selectedPost {
                         PostDetailSheet(post: post)
+                    } else {
+                        Text("エラー: 投稿が見つかりません")
                     }
                 }
             }
@@ -335,6 +319,17 @@ struct ContentView: View {
                 )
             }
         }
+        .onChange(of: viewModel.posts.map { $0.id }) { newPostIds in
+            if let selectedPost = selectedPinPost {
+                let isStillInRange = newPostIds.contains(selectedPost.id)
+                if !isStillInRange {
+                    withAnimation(springAnimation) {
+                        selectedPinPost = nil
+                        selectedCardPost = nil
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Map Region Changed
@@ -388,7 +383,7 @@ struct PostListBottomSheet: View {
     @ObservedObject var viewModel: NearbyPostsViewModel
     @Binding var region: MKCoordinateRegion
     @Binding var selectedPinPost: Post?
-    @State private var selectedPost: Post?
+    @Binding var selectedCardPost: Post?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -400,7 +395,7 @@ struct PostListBottomSheet: View {
                             ForEach(viewModel.posts) { post in
                                 CarouselPostCardView(
                                     post: post,
-                                    isSelected: selectedPost?.id == post.id
+                                    isSelected: selectedCardPost?.id == post.id
                                 )
                                 .onTapGesture {
                                     // 位置情報を先に取得
@@ -408,7 +403,7 @@ struct PostListBottomSheet: View {
                                     let postLongitude = post.longitude
 
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        selectedPost = post
+                                        selectedCardPost = post
                                         selectedPinPost = post // ピンの状態も更新
 
                                         // カードを中央にスクロール
@@ -432,6 +427,13 @@ struct PostListBottomSheet: View {
                         .padding(.vertical, 4)
                     }
                     .frame(height: 175)
+                    .onChange(of: selectedCardPost?.id) { newPostId in
+                        if let postId = newPostId {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                proxy.scrollTo(postId, anchor: .center)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -915,109 +917,201 @@ struct MapPinCalloutView: View {
     let onTap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // ユーザー情報
-            HStack(spacing: 8) {
-                if let avatarURL = post.user.avatarURL, let url = URL(string: avatarURL) {
-                    CachedAsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
+        VStack(spacing: 0) {
+            // 吹き出し本体
+            VStack(alignment: .leading, spacing: 8) {
+                // ユーザー情報
+                HStack(spacing: 8) {
+                    if let avatarURL = post.user.avatarURL, let url = URL(string: avatarURL) {
+                        CachedAsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            Image(systemName: "person.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                        .frame(width: 24, height: 24)
+                        .clipShape(Circle())
+                    } else {
                         Image(systemName: "person.circle.fill")
+                            .font(.system(size: 24))
                             .foregroundColor(.gray)
                     }
-                    .frame(width: 24, height: 24)
-                    .clipShape(Circle())
-                } else {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.gray)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(post.user.displayName ?? post.user.username)
+                            .font(.subheadline) // キャプションから拡大
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+
+                        Text(post.createdAt.formatted(.relative(presentation: .named)))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    if post.user.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.blue)
+                            .font(.caption2)
+                    }
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(post.user.displayName ?? post.user.username)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
+                // 投稿内容プレビュー
+                Text(post.content)
+                    .font(.body) // キャプションから拡大
+                    .lineLimit(2)
+                    .foregroundColor(.primary)
 
-                    Text(post.createdAt.formatted(.relative(presentation: .named)))
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
+                // バッジとエンゲージメント
+                HStack(spacing: 8) {
+                    if post.isUrgent {
+                        Label("緊急", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red)
+                            .cornerRadius(4)
+                    }
 
-                Spacer()
+                    if post.isVerified {
+                        Label("検証済み", systemImage: "checkmark.seal.fill")
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue)
+                            .cornerRadius(4)
+                    }
 
-                if post.user.isVerified {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundColor(.blue)
-                        .font(.caption2)
-                }
-            }
+                    Spacer()
 
-            // 投稿内容プレビュー
-            Text(post.content)
-                .font(.caption)
-                .lineLimit(2)
-                .foregroundColor(.primary)
+                    HStack(spacing: 12) {
+                        Label("\(post.likeCount)", systemImage: "heart.fill")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
 
-            // バッジとエンゲージメント
-            HStack(spacing: 8) {
-                if post.isUrgent {
-                    Label("緊急", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.red)
-                        .cornerRadius(4)
-                }
-
-                if post.isVerified {
-                    Label("検証済み", systemImage: "checkmark.seal.fill")
-                        .font(.caption2)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.blue)
-                        .cornerRadius(4)
-                }
-
-                Spacer()
-
-                HStack(spacing: 12) {
-                    Label("\(post.likeCount)", systemImage: "heart.fill")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-
-                    Label("\(post.commentCount)", systemImage: "bubble.fill")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                        Label("\(post.commentCount)", systemImage: "bubble.fill")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
-        }
-        .padding(12)
-        .frame(width: 220)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
-        .onTapGesture {
-            onTap()
-        }
-        // 吹き出しの下にある三角形
-        .overlay(alignment: .bottom) {
+            .padding(12)
+            .frame(width: 280) // 幅を拡大して見やすく
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onTap()
+            }
+
+            // 吹き出しの下にある三角形（独立した要素として配置）
             Triangle()
                 .fill(Color(.systemBackground))
                 .frame(width: 20, height: 10)
-                .offset(y: 10)
-                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 2)
+                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                .offset(y: -5) // 吹き出しと適度な距離を保つ
         }
+    }
+}
+
+// MARK: - Post Map Annotation Content
+struct PostMapAnnotationContent: View {
+    let post: Post
+    @Binding var selectedPinPost: Post?
+    @Binding var selectedCardPost: Post?
+    @Binding var region: MKCoordinateRegion
+    @Binding var selectedPost: Post?
+    @Binding var showingPostDetail: Bool
+    let springAnimation: Animation
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 吹き出し（選択時のみ表示）
+            if selectedPinPost?.id == post.id {
+                MapPinCalloutView(post: post) {
+                    selectedPost = post
+                    showingPostDetail = true
+                }
+                .transition(.scale.combined(with: .opacity))
+                .padding(.bottom, 20) // 三角形とピンの間に十分な余白を追加
+            }
+
+            // ピン
+            PostPinView(
+                post: post,
+                isSelected: selectedPinPost?.id == post.id,
+                springAnimation: springAnimation,
+                onTap: {
+                    if selectedPinPost?.id == post.id {
+                        withAnimation(springAnimation) {
+                            selectedPinPost = nil
+                            selectedCardPost = nil
+                        }
+                    } else {
+                        withAnimation(springAnimation) {
+                            selectedPinPost = post
+                            selectedCardPost = post
+                        }
+
+                        if let lat = post.latitude, let lng = post.longitude {
+                            withAnimation {
+                                // 吹き出しの高さを考慮して、カメラ位置を少し下にオフセット
+                                let latitudeOffset = kPinFocusZoomSpan.latitudeDelta * 0.15
+                                region = MKCoordinateRegion(
+                                    center: CLLocationCoordinate2D(
+                                        latitude: lat - latitudeOffset,
+                                        longitude: lng
+                                    ),
+                                    span: kPinFocusZoomSpan
+                                )
+                            }
+                        }
+                    }
+                }
+            )
+        }
+    }
+}
+
+// MARK: - Post Pin View
+struct PostPinView: View {
+    let post: Post
+    let isSelected: Bool
+    let springAnimation: Animation
+    let onTap: () -> Void
+
+    var body: some View {
+        let iconName = post.isUrgent ? "exclamationmark.triangle.fill" : "mappin.circle.fill"
+        let pinColor: Color = isSelected ? .orange : (post.isUrgent ? .red : .blue)
+
+        Image(systemName: iconName)
+            .font(.title2)
+            .foregroundColor(pinColor)
+            .background(
+                Circle()
+                    .fill(.white)
+                    .frame(width: 28, height: 28)
+            )
+            .scaleEffect(isSelected ? 2.0 : 1.0)
+            .contentShape(Circle())
+            .highPriorityGesture(
+                TapGesture()
+                    .onEnded { _ in
+                        onTap()
+                    }
+            )
     }
 }
 
