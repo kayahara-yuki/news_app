@@ -56,7 +56,8 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
         // locationManager.allowsBackgroundLocationUpdates = true
 
         // 認証ステータスはデリゲートメソッド (locationManagerDidChangeAuthorization) で更新される
-        isLocationEnabled = CLLocationManager.locationServicesEnabled()
+        // iOS 17以降、locationServicesEnabled()はメインスレッドでUI応答性を低下させる可能性があるため、
+        // デリゲートメソッドで権限状態を管理する
     }
     
     // MARK: - 位置情報の許可要求
@@ -69,12 +70,21 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
     private func requestLocationPermission() {
         switch authorizationStatus {
         case .notDetermined:
+            #if os(macOS)
+            locationManager.requestAlwaysAuthorization()
+            #else
             locationManager.requestWhenInUseAuthorization()
+            #endif
         case .denied, .restricted:
             // 設定アプリを開くよう促す
             errorMessage = "位置情報の使用が許可されていません。設定アプリで許可してください。"
+        #if os(macOS)
+        case .authorizedAlways:
+            startLocationUpdates()
+        #else
         case .authorizedWhenInUse, .authorizedAlways:
             startLocationUpdates()
+        #endif
         @unknown default:
             break
         }
@@ -99,15 +109,18 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
     
     /// 現在位置の取得を開始
     func startLocationUpdates() {
-        guard CLLocationManager.locationServicesEnabled() else {
-            errorMessage = "位置情報サービスが無効です"
+        // iOS 17以降、authorizationStatusで権限状態を確認
+        #if os(macOS)
+        guard authorizationStatus == .authorizedAlways else {
+            requestLocationPermission()
             return
         }
-
+        #else
         guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
             requestLocationPermission()
             return
         }
+        #endif
 
         locationManager.startUpdatingLocation()
     }
@@ -132,16 +145,19 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
     }
     
     private func getCurrentLocationSync() {
-        guard CLLocationManager.locationServicesEnabled() else {
-            errorMessage = "位置情報サービスが無効です"
+        // iOS 17以降、authorizationStatusで権限状態を確認
+        #if os(macOS)
+        guard authorizationStatus == .authorizedAlways else {
+            requestLocationPermission()
             return
         }
-        
+        #else
         guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
             requestLocationPermission()
             return
         }
-        
+        #endif
+
         locationManager.requestLocation()
     }
     
@@ -246,9 +262,21 @@ extension LocationService: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         authorizationStatus = status
 
+        // 位置情報サービスの有効状態を更新（デリゲートメソッド内で安全に取得）
+        #if os(macOS)
+        isLocationEnabled = (status == .authorizedAlways)
+        #else
+        isLocationEnabled = (status == .authorizedWhenInUse || status == .authorizedAlways)
+        #endif
+
         switch status {
+        #if os(macOS)
+        case .authorizedAlways:
+            startLocationUpdates()
+        #else
         case .authorizedWhenInUse, .authorizedAlways:
             startLocationUpdates()
+        #endif
         case .denied, .restricted:
             stopLocationUpdates()
             errorMessage = "位置情報の使用が許可されていません"

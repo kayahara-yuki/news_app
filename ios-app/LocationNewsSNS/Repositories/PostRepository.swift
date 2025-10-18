@@ -30,24 +30,19 @@ class PostRepository: PostRepositoryProtocol {
 
     // パフォーマンス最適化: キャッシュ層
     private let nearbyPostsCache = NSCache<NSString, CachedPosts>()
-    private let cacheTTL: TimeInterval = 300 // 5分
+    private let cacheTTL: TimeInterval = 60 // 1分(リアルタイム性向上)
 
     nonisolated func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double = 10000) async throws -> [Post] {
-        AppLogger.debug("fetchNearbyPosts - lat: \(latitude), lng: \(longitude), radius: \(radius)m")
-
-        // キャッシュキーの生成（位置情報を100m単位で丸める）
-        let roundedLat = round(latitude * 1000) / 1000 // 約100m精度
-        let roundedLng = round(longitude * 1000) / 1000
+        // キャッシュキーの生成（位置情報を10m単位で丸める）
+        let roundedLat = round(latitude * 10000) / 10000 // 約10m精度
+        let roundedLng = round(longitude * 10000) / 10000
         let cacheKey = "nearby_\(roundedLat)_\(roundedLng)_\(Int(radius))" as NSString
 
         // キャッシュチェック
         if let cached = nearbyPostsCache.object(forKey: cacheKey),
            Date().timeIntervalSince(cached.timestamp) < cacheTTL {
-            AppLogger.debug("キャッシュヒット: \(cached.posts.count) 件")
             return cached.posts
         }
-
-        AppLogger.debug("キャッシュミス - API呼び出し")
 
         // PostGIS nearby_posts_with_user RPC関数を使用した近隣検索
         // デフォルト半径: 10km (10000m) - パフォーマンス最適化のため制限
@@ -69,16 +64,12 @@ class PostRepository: PostRepositoryProtocol {
             max_results: 50
         )
 
-        AppLogger.debug("RPC呼び出し - params: \(params)")
-
         let response: [NearbyPostResponse] = try await supabase
             .rpc("nearby_posts_with_user", params: params)
             .execute()
             .value
 
-        AppLogger.debug("RPC レスポンス: \(response.count) 件")
         let posts = try response.map { try $0.toPost() }
-        AppLogger.debug("Post変換完了: \(posts.count) 件")
 
         // キャッシュに保存
         let cachedPosts = CachedPosts(posts: posts, timestamp: Date())

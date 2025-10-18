@@ -124,23 +124,29 @@ class NearbyPostsViewModel: ObservableObject {
                 radius: radius
             )
 
-            // 距離を計算して設定
+            // 距離を計算して設定（バックグラウンドスレッドで実行）
             let userLocation = CLLocation(latitude: latitude, longitude: longitude)
             if let postService = dependencies.postService as? PostService {
-                posts = postService.nearbyPosts.map { post in
-                    var updatedPost = post
-                    if let postLocation = post.location {
-                        let distance = userLocation.distance(from: postLocation)
-                        updatedPost.distance = distance
+                let nearbyPosts = postService.nearbyPosts
+
+                // 距離計算をバックグラウンドで実行
+                let postsWithDistance = await Task.detached {
+                    nearbyPosts.map { post in
+                        var updatedPost = post
+                        if let postLocation = post.location {
+                            let distance = userLocation.distance(from: postLocation)
+                            updatedPost.distance = distance
+                        }
+                        return updatedPost
                     }
-                    return updatedPost
-                }
+                }.value
+
+                // メインスレッドで結果を設定
+                posts = postsWithDistance
             } else {
                 AppLogger.error("PostServiceのキャストに失敗")
             }
 
-            // ピンの配置が完了するまで少し待つ（UIの更新を反映）
-            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3秒
             isLoading = false
         } catch {
             AppLogger.error("エラー: \(error.localizedDescription)")

@@ -57,7 +57,7 @@ struct ContentView: View {
             // メイン地図画面
             NavigationView {
                 ZStack {
-                    // パフォーマンス最適化: カスタムMapAnnotationから標準Markerに変更
+                    // パフォーマンス最適化: 投稿IDで差分更新を最適化
                     Map(coordinateRegion: $region, showsUserLocation: true, annotationItems: viewModel.posts) { post in
                         MapAnnotation(coordinate: CLLocationCoordinate2D(
                             latitude: post.latitude ?? 35.6812,
@@ -73,8 +73,10 @@ struct ContentView: View {
                                 springAnimation: springAnimation
                             )
                             .zIndex(selectedPinPost?.id == post.id ? 1000 : 0)
+                            .id(post.id) // SwiftUIの差分更新を最適化
                         }
                     }
+                    .id(viewModel.posts.map { $0.id }) // Map全体の再描画を投稿IDリストで制御
                     .overlay(
                         // 選択された範囲の円を表示
                         MapCircleOverlay(center: region.center, radius: selectedRadius, span: region.span)
@@ -86,11 +88,8 @@ struct ContentView: View {
                             selectedCardPost = nil
                         }
                     }
-                    .onChange(of: region.center.latitude) { _ in
-                        onMapRegionChanged(newCoordinate: region.center)
-                    }
-                    .onChange(of: region.center.longitude) { _ in
-                        onMapRegionChanged(newCoordinate: region.center)
+                    .onChange(of: region.center) { newCenter in
+                        onMapRegionChanged(newCoordinate: newCenter)
                     }
                     .onChange(of: selectedRadius) { _ in
                         // 範囲変更時に投稿を再取得

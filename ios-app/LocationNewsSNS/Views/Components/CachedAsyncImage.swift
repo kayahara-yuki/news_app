@@ -48,7 +48,17 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
             return
         }
 
-        // URLCacheから画像を取得を試みる
+        // メモリキャッシュから画像を取得を試みる（高速）
+        let cacheKey = url.absoluteString
+        if let cachedImage = ImageCacheManager.shared.image(forKey: cacheKey) {
+            let image = Image(uiImage: cachedImage)
+            withTransaction(transaction) {
+                phase = .success(image)
+            }
+            return
+        }
+
+        // URLCacheから画像を取得を試みる（中速）
         let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad)
 
         do {
@@ -63,6 +73,9 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 
             // UIImageに変換
             if let uiImage = UIImage(data: data) {
+                // メモリキャッシュに保存
+                ImageCacheManager.shared.setImage(uiImage, forKey: cacheKey)
+
                 let image = Image(uiImage: uiImage)
                 withTransaction(transaction) {
                     phase = .success(image)
