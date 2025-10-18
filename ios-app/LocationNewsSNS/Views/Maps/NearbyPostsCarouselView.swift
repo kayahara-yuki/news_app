@@ -120,128 +120,114 @@ struct CarouselPostCardView: View {
     let post: Post
     let isSelected: Bool
 
-    @State private var showingFullImage = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-                // 画像セクション（もし画像があれば）- mediaUrlsは削除されたためコメントアウト
-                // if let imageUrl = post.mediaUrls?.first {
-                if false { // 画像表示は将来実装
-                    CachedAsyncImage(url: URL(string: "")) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .overlay(ProgressView())
+            // コンテンツセクション
+            VStack(alignment: .leading, spacing: 10) {
+                // ユーザー情報
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.blue.opacity(0.3))
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.blue)
+                        )
+
+                    Text(post.userName ?? "Unknown")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    // 緊急度バッジ
+                    if post.isUrgent {
+                        HStack(spacing: 2) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 10))
+                            Text("緊急")
+                                .font(.system(size: 9))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.red)
+                        .cornerRadius(4)
                     }
-                    .frame(height: 100)
-                    .clipped()
                 }
 
-                // コンテンツセクション
-                VStack(alignment: .leading, spacing: 8) {
-                    // ユーザー情報
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.blue.opacity(0.3))
-                            .frame(width: 24, height: 24)
-                            .overlay(
-                                Image(systemName: "person.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.blue)
-                            )
+                // 投稿内容
+                Text(post.content)
+                    .font(.subheadline)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                    .frame(height: 36, alignment: .top)
 
-                        Text(post.userName ?? "Unknown")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
+                Spacer(minLength: 0)
 
-                        Spacer()
-
-                        // 緊急度バッジ
-                        if post.isUrgent {
-                            HStack(spacing: 2) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.system(size: 10))
-                                Text("緊急")
-                                    .font(.system(size: 9))
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.red)
-                            .cornerRadius(4)
-                        }
-                    }
-
-                    // 投稿内容
-                    Text(post.content)
-                        .font(.subheadline)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-
-                    // 位置情報とカテゴリ
-                    HStack(spacing: 12) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 10))
-                            Text(distanceText)
-                                .font(.caption2)
-                        }
-                        .foregroundColor(.blue)
-
-                        HStack(spacing: 4) {
-                            Image(systemName: "tag.fill")
-                                .font(.system(size: 10))
-                            Text(post.category.displayName)
-                                .font(.caption2)
-                        }
-                        .foregroundColor(.secondary)
-
-                        Spacer()
-
-                        Text(timeAgoText)
+                // 位置情報とカテゴリ
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 10))
+                        Text(distanceText)
                             .font(.caption2)
-                            .foregroundColor(.secondary)
                     }
+                    .foregroundColor(.blue)
 
-                    // インタラクション情報
-                    HStack(spacing: 16) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "heart.fill")
-                                .font(.system(size: 10))
-                            Text("\(post.likeCount)")
-                                .font(.caption2)
-                        }
-                        .foregroundColor(.secondary)
-
-                        HStack(spacing: 4) {
-                            Image(systemName: "bubble.left.fill")
-                                .font(.system(size: 10))
-                            Text("\(post.commentCount)")
-                                .font(.caption2)
-                        }
-                        .foregroundColor(.secondary)
-
-                        Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "tag.fill")
+                            .font(.system(size: 10))
+                        Text(post.category.displayName)
+                            .font(.caption2)
                     }
+                    .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    Text(timeAgoText)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
-                .padding(12)
+
+                // インタラクション情報
+                HStack(spacing: 16) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 10))
+                        Text("\(post.likeCount)")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.secondary)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.left.fill")
+                            .font(.system(size: 10))
+                        Text("\(post.commentCount)")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.secondary)
+
+                    Spacer()
+                }
             }
-            .frame(width: 280)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? Color.white.opacity(0.95) : Color.white.opacity(0.95))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Color.blue : Color.white.opacity(0.3), lineWidth: isSelected ? 2 : 1)
-            )
-            .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-            .scaleEffect(isSelected ? 1.02 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+            .padding(14)
+        }
+        .frame(width: 280, height: 165)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.95))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(isSelected ? Color.blue : Color.white.opacity(0.3), lineWidth: isSelected ? 2 : 1)
+        )
+        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
     }
 
     // MARK: - Computed Properties

@@ -150,6 +150,7 @@ struct ContentView: View {
 
                         // Liquid Glass エフェクトのボトムシート
                         PostListBottomSheet(viewModel: viewModel, region: $region, selectedPinPost: $selectedPinPost)
+                            .padding(.bottom, 16)
                     }
                 }
                 .sheet(isPresented: $showingPostCreation) {
@@ -241,7 +242,7 @@ struct PostListBottomSheet: View {
     @State private var scrollPosition: UUID?
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             // 横スクロールカルーセル
             if viewModel.posts.isEmpty && !viewModel.isLoading {
                 emptyStateView
@@ -282,9 +283,9 @@ struct PostListBottomSheet: View {
                             }
                         }
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 4)
                     }
-                    .frame(height: 240)
+                    .frame(height: 175)
                 }
             }
         }
