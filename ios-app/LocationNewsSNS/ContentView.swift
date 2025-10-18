@@ -16,6 +16,7 @@ struct ContentView: View {
     // マップスクロール監視用
     @State private var lastFetchedCoordinate: CLLocationCoordinate2D?
     @State private var fetchTask: Task<Void, Never>?
+    @State private var isMapMoving = false // 地図移動中フラグ
 
     // 検索範囲の半径（メートル単位）
     @State private var selectedRadius: Double = 2000 // デフォルト2km
@@ -109,8 +110,8 @@ struct ContentView: View {
                         onMapRegionChanged(newCoordinate: region.center)
                     }
 
-                    // ローディングインジケータ（投稿取得中）
-                    if viewModel.isLoading {
+                    // ローディングインジケータ（投稿取得中または地図移動中）
+                    if viewModel.isLoading || isMapMoving {
                         VStack {
                             HStack(spacing: 12) {
                                 ProgressView()
@@ -134,7 +135,6 @@ struct ContentView: View {
                             Spacer()
                         }
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                        .animation(.easeInOut(duration: 0.2), value: viewModel.isLoading)
                     }
 
                     // カスタムヘッダー（ナビゲーションバー不使用）
@@ -301,6 +301,9 @@ struct ContentView: View {
             }
         }
 
+        // 地図移動開始を即座に表示
+        isMapMoving = true
+
         // 既存のタスクをキャンセル
         fetchTask?.cancel()
 
@@ -309,10 +312,18 @@ struct ContentView: View {
             do {
                 try await Task.sleep(nanoseconds: 1_000_000_000) // 1秒
             } catch {
+                isMapMoving = false // キャンセル時もフラグをリセット
                 return // キャンセルされた場合は終了
             }
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                isMapMoving = false
+                return
+            }
+
+            // デバウンス完了、API呼び出し開始直前にフラグをオフ
+            // (viewModel.isLoadingが引き継ぐ)
+            isMapMoving = false
 
             // 新しい座標で投稿を取得（選択された範囲で）
             await viewModel.fetchNearbyPostsForCoordinate(
