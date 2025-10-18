@@ -48,7 +48,7 @@ struct ContentView: View {
             NavigationView {
                 ZStack {
                     // パフォーマンス最適化: カスタムMapAnnotationから標準Markerに変更
-                    Map(coordinateRegion: $region, annotationItems: viewModel.posts) { post in
+                    Map(coordinateRegion: $region, showsUserLocation: true, annotationItems: viewModel.posts) { post in
                         MapAnnotation(coordinate: CLLocationCoordinate2D(
                             latitude: post.latitude ?? 35.6812,
                             longitude: post.longitude ?? 139.7671
@@ -228,6 +228,27 @@ struct ContentView: View {
         .onAppear {
             // アプリ起動時に位置情報の許可をリクエスト
             locationService.requestPermission()
+
+            // 位置情報が許可されていて現在地が取得できている場合、地図の初期位置を現在地に設定
+            if locationService.authorizationStatus == .authorizedWhenInUse ||
+               locationService.authorizationStatus == .authorizedAlways,
+               let currentLocation = locationService.currentLocation {
+                region = MKCoordinateRegion(
+                    center: currentLocation.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                )
+            }
+        }
+        .onChange(of: locationService.currentLocation) { newLocation in
+            // 位置情報が更新されたときに、初回のみ地図の中心を現在地に移動
+            // lastFetchedCoordinateがnilの場合は初回とみなす
+            if lastFetchedCoordinate == nil,
+               let location = newLocation {
+                region = MKCoordinateRegion(
+                    center: location.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                )
+            }
         }
     }
 
