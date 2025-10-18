@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 import MapKit
 
 // MARK: - 投稿作成画面
@@ -9,13 +8,10 @@ struct PostCreationView: View {
     @EnvironmentObject var postService: PostService
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var locationService: LocationService
-    @EnvironmentObject var mediaUploadService: MediaUploadService
     
     @State private var postContent = ""
     @State private var selectedLocation: CLLocationCoordinate2D?
     @State private var locationName = ""
-    @State private var selectedPhotos: [PhotosPickerItem] = []
-    @State private var selectedImages: [UIImage] = []
     @State private var visibility: PostVisibility = .public
     @State private var allowComments = true
     @State private var emergencyLevel: EmergencyLevel?
@@ -41,7 +37,6 @@ struct PostCreationView: View {
     @State private var showAttachmentsSheet = false
     
     private let maxContentLength = 1000
-    private let maxImages = 4
     private let maxTags = 10
 
     // 人気タグ
@@ -142,7 +137,7 @@ struct PostCreationView: View {
             .sheet(isPresented: $showingPreview) {
                 PostPreviewView(
                     content: postContent,
-                    images: selectedImages,
+                    images: [],
                     location: selectedLocation,
                     locationName: locationName,
                     tags: Array(tags),
@@ -153,16 +148,12 @@ struct PostCreationView: View {
             }
             .sheet(isPresented: $showAttachmentsSheet) {
                 AttachmentsPreviewSheet(
-                    selectedImages: $selectedImages,
                     urlInput: $urlInput,
                     urlMetadata: $urlMetadata,
                     selectedLocation: $selectedLocation,
                     locationName: $locationName,
                     tags: $tags,
                     emergencyLevel: $emergencyLevel,
-                    onRemoveImage: { index in
-                        selectedImages.remove(at: index)
-                    },
                     onShowLocationPicker: {
                         showAttachmentsSheet = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -208,21 +199,6 @@ struct PostCreationView: View {
     @ViewBuilder
     private var bottomToolbar: some View {
         HStack(spacing: 20) {
-            // 写真追加
-            PhotosPicker(
-                selection: $selectedPhotos,
-                maxSelectionCount: maxImages,
-                matching: .images
-            ) {
-                Image(systemName: selectedImages.isEmpty ? "photo" : "photo.fill")
-                    .foregroundColor(selectedImages.isEmpty ? .blue : .green)
-                    .imageScale(.large)
-            }
-            .disabled(selectedImages.count >= maxImages)
-            .onChange(of: selectedPhotos) { newItems in
-                loadSelectedPhotos(newItems)
-            }
-
             // リンク追加
             Button(action: {
                 showURLInput.toggle()
@@ -612,7 +588,6 @@ struct PostCreationView: View {
     }
 
     private var hasAnyAttachments: Bool {
-        !selectedImages.isEmpty ||
         urlMetadata != nil ||
         !urlInput.isEmpty ||
         selectedLocation != nil ||
@@ -622,7 +597,6 @@ struct PostCreationView: View {
 
     private var attachmentCount: Int {
         var count = 0
-        if !selectedImages.isEmpty { count += 1 }
         if urlMetadata != nil || !urlInput.isEmpty { count += 1 }
         if selectedLocation != nil { count += 1 }
         if !tags.isEmpty { count += 1 }
@@ -646,22 +620,6 @@ struct PostCreationView: View {
         }
     }
     
-    private func loadSelectedPhotos(_ items: [PhotosPickerItem]) {
-        Task {
-            var images: [UIImage] = []
-            
-            for item in items {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    images.append(image)
-                }
-            }
-            
-            await MainActor.run {
-                selectedImages = images
-            }
-        }
-    }
     
     private func addTag() {
         let trimmedTag = newTag.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -689,7 +647,7 @@ struct PostCreationView: View {
                     allowComments: allowComments,
                     emergencyLevel: emergencyLevel,
                     tags: Array(tags),
-                    images: selectedImages
+                    images: []
                 )
                 
                 await postService.createPost(request)
@@ -934,7 +892,6 @@ struct URLMetadataPreviewCard: View {
 struct AttachmentsPreviewSheet: View {
     @Environment(\.dismiss) var dismiss
 
-    @Binding var selectedImages: [UIImage]
     @Binding var urlInput: String
     @Binding var urlMetadata: URLMetadata?
     @Binding var selectedLocation: CLLocationCoordinate2D?
@@ -942,7 +899,6 @@ struct AttachmentsPreviewSheet: View {
     @Binding var tags: Set<String>
     @Binding var emergencyLevel: EmergencyLevel?
 
-    var onRemoveImage: (Int) -> Void
     var onShowLocationPicker: () -> Void
     var onShowTagsInput: () -> Void
     var onShowEmergencyPicker: () -> Void
@@ -950,38 +906,6 @@ struct AttachmentsPreviewSheet: View {
     var body: some View {
         NavigationView {
             List {
-                // 画像セクション
-                if !selectedImages.isEmpty {
-                    Section {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(selectedImages.indices, id: \.self) { index in
-                                    ZStack(alignment: .topTrailing) {
-                                        Image(uiImage: selectedImages[index])
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 120, height: 120)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                                        Button {
-                                            onRemoveImage(index)
-                                        } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .font(.title3)
-                                                .foregroundColor(.white)
-                                                .background(Circle().fill(Color.black.opacity(0.6)))
-                                        }
-                                        .padding(8)
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
-                    } header: {
-                        Label("画像 (\(selectedImages.count))", systemImage: "photo.fill")
-                    }
-                }
-
                 // URLセクション
                 if let metadata = urlMetadata {
                     Section {
@@ -1133,7 +1057,6 @@ struct AttachmentsPreviewSheet: View {
     }
 
     private var hasAnyAttachments: Bool {
-        !selectedImages.isEmpty ||
         urlMetadata != nil ||
         !urlInput.isEmpty ||
         selectedLocation != nil ||
