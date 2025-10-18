@@ -161,6 +161,44 @@ struct ContentView: View {
                         Spacer()
                     }
 
+                    // 現在位置に戻るボタン（右下角）
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button {
+                                // 現在位置にマップを移動
+                                if let currentLocation = locationService.currentLocation {
+                                    withAnimation {
+                                        region = MKCoordinateRegion(
+                                            center: currentLocation.coordinate,
+                                            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                                        )
+                                    }
+
+                                    // ハプティックフィードバック
+                                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                    impactFeedback.impactOccurred()
+                                } else {
+                                    // 位置情報がない場合は許可をリクエスト
+                                    locationService.requestPermission()
+                                }
+                            } label: {
+                                Image(systemName: "location.fill")
+                                    .font(.system(size: 20, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(.blue)
+                                    .clipShape(Circle())
+                                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                            }
+                            .accessibilityLabel("現在位置に戻る")
+                            .accessibilityHint("マップを現在位置に移動します")
+                            .padding(.trailing, 16)
+                            .padding(.bottom, viewModel.posts.isEmpty ? 50 : 200)
+                        }
+                    }
+
                     // タブバーエリアを暗くするグラデーションオーバーレイ
                     VStack {
                         Spacer()
