@@ -2,6 +2,11 @@ import SwiftUI
 import MapKit
 
 struct ContentView: View {
+    // MARK: - Constants
+    private let defaultMapSpan = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    private let springAnimation = Animation.spring(response: 0.3, dampingFraction: 0.7)
+
+    // MARK: - State Properties
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 35.6812, longitude: 139.7671), // 東京駅
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
@@ -69,7 +74,7 @@ struct ContentView: View {
                                     )
                                     .scaleEffect(selectedPinPost?.id == post.id ? 2.0 : 1.0)
                                     .onTapGesture {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        withAnimation(springAnimation) {
                                             if selectedPinPost?.id == post.id {
                                                 // 同じピンをタップしたら閉じる
                                                 selectedPinPost = nil
@@ -135,10 +140,11 @@ struct ContentView: View {
                             Spacer()
                         }
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                        .zIndex(1)
                     }
 
                     // カスタムヘッダー（ナビゲーションバー不使用）
-                    VStack {
+                    VStack(spacing: 8) {
                         HStack(alignment: .top) {
                             // 左側: 距離選択ボタン
                             RadiusSelectorView(selectedRadius: $selectedRadius)
@@ -158,6 +164,31 @@ struct ContentView: View {
                         }
                         .padding(.top, 8)
 
+                        // 投稿がない場合の上部バナー
+                        if viewModel.posts.isEmpty && !viewModel.isLoading {
+                            HStack(spacing: 8) {
+                                Image(systemName: "map.circle")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+
+                                Text("近くに投稿がありません")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                Capsule()
+                                    .fill(.ultraThinMaterial)
+                                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                            )
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(.white.opacity(0.3), lineWidth: 0.5)
+                            )
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+
                         Spacer()
                     }
 
@@ -172,7 +203,7 @@ struct ContentView: View {
                                     withAnimation {
                                         region = MKCoordinateRegion(
                                             center: currentLocation.coordinate,
-                                            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                                            span: defaultMapSpan
                                         )
                                     }
 
@@ -273,7 +304,7 @@ struct ContentView: View {
                let currentLocation = locationService.currentLocation {
                 region = MKCoordinateRegion(
                     center: currentLocation.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    span: defaultMapSpan
                 )
             }
         }
@@ -284,7 +315,7 @@ struct ContentView: View {
                let location = newLocation {
                 region = MKCoordinateRegion(
                     center: location.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    span: defaultMapSpan
                 )
             }
         }
@@ -342,14 +373,11 @@ struct PostListBottomSheet: View {
     @Binding var region: MKCoordinateRegion
     @Binding var selectedPinPost: Post?
     @State private var selectedPost: Post?
-    @State private var scrollPosition: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
-            // 横スクロールカルーセル
-            if viewModel.posts.isEmpty && !viewModel.isLoading {
-                emptyStateView
-            } else {
+            // 横スクロールカルーセル（投稿がある場合のみ表示）
+            if !viewModel.posts.isEmpty {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 16) {
@@ -366,7 +394,6 @@ struct PostListBottomSheet: View {
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                         selectedPost = post
                                         selectedPinPost = post // ピンの状態も更新
-                                        scrollPosition = post.id
 
                                         // カードを中央にスクロール
                                         proxy.scrollTo(post.id, anchor: .center)
@@ -396,21 +423,6 @@ struct PostListBottomSheet: View {
         .onAppear {
             viewModel.fetchNearbyPosts()
         }
-    }
-
-    @ViewBuilder
-    private var emptyStateView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "map.circle")
-                .font(.system(size: 40))
-                .foregroundColor(.gray)
-
-            Text("近くに投稿がありません")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxHeight: .infinity)
-        .padding()
     }
 }
 
@@ -775,7 +787,8 @@ struct RadiusSelectorView: View {
     @Binding var selectedRadius: Double
     @State private var isExpanded: Bool = false
 
-    let radiusOptions: [Double] = [1000, 2000, 3000, 4000, 5000]
+    private let radiusOptions: [Double] = [1000, 2000, 3000, 4000, 5000]
+    private let springAnimation = Animation.spring(response: 0.3, dampingFraction: 0.7)
 
     var body: some View {
         HStack(spacing: 8) {
@@ -783,7 +796,7 @@ struct RadiusSelectorView: View {
                 // 展開時: 全てのオプションを表示
                 ForEach(radiusOptions, id: \.self) { radius in
                     Button(action: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        withAnimation(springAnimation) {
                             selectedRadius = radius
                             isExpanded = false
                         }
@@ -806,7 +819,7 @@ struct RadiusSelectorView: View {
             } else {
                 // 折りたたみ時: 現在の選択値のみ表示
                 Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(springAnimation) {
                         isExpanded = true
                     }
                 }) {
