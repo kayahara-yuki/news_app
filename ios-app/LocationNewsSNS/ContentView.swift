@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var showingPostDetail = false
     @State private var selectedPinPost: Post? // ピン選択時の吹き出し表示用
     @EnvironmentObject private var viewModel: NearbyPostsViewModel
+    @EnvironmentObject private var locationService: LocationService
 
     // マップスクロール監視用
     @State private var lastFetchedCoordinate: CLLocationCoordinate2D?
@@ -108,6 +109,34 @@ struct ContentView: View {
                         onMapRegionChanged(newCoordinate: region.center)
                     }
 
+                    // ローディングインジケータ（投稿取得中）
+                    if viewModel.isLoading {
+                        VStack {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.9)
+
+                                Text("投稿取得中...")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                Capsule()
+                                    .fill(Color.black.opacity(0.75))
+                                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                            )
+                            .padding(.top, 60)
+
+                            Spacer()
+                        }
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                        .animation(.easeInOut(duration: 0.2), value: viewModel.isLoading)
+                    }
+
                     // カスタムヘッダー（ナビゲーションバー不使用）
                     VStack {
                         HStack(alignment: .top) {
@@ -196,6 +225,10 @@ struct ContentView: View {
         }
         .tabViewStyle(.automatic)
         .preferredColorScheme(.light)
+        .onAppear {
+            // アプリ起動時に位置情報の許可をリクエスト
+            locationService.requestPermission()
+        }
     }
 
     // MARK: - Map Region Changed

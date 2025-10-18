@@ -41,11 +41,10 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
         Task { @MainActor in
             self.stopLocationUpdates()
         }
-        AppLogger.debug("deinit called")
     }
 
     // MARK: - セットアップ
-    
+
     private func setupLocationManager() {
         locationManager.delegate = self
         // パフォーマンス最適化: 精度を100mに設定してバッテリー消費を削減
@@ -104,12 +103,12 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
             errorMessage = "位置情報サービスが無効です"
             return
         }
-        
+
         guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
             requestLocationPermission()
             return
         }
-        
+
         locationManager.startUpdatingLocation()
     }
     
@@ -199,8 +198,10 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
 
 extension LocationService: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }
-        
+        guard let location = locations.last else {
+            return
+        }
+
         currentLocation = location
         currentLocationData = LocationData(
             latitude: location.coordinate.latitude,
@@ -209,9 +210,9 @@ extension LocationService: CLLocationManagerDelegate {
             timestamp: location.timestamp,
             source: .gps
         )
-        
+
         errorMessage = nil
-        
+
         // 非同期コールバックの処理
         if let completion = locationCompletion {
             completion(.success(location))
@@ -220,8 +221,6 @@ extension LocationService: CLLocationManagerDelegate {
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("位置情報取得エラー: \(error)")
-        
         if let clError = error as? CLError {
             switch clError.code {
             case .denied:
@@ -236,7 +235,7 @@ extension LocationService: CLLocationManagerDelegate {
         } else {
             errorMessage = "位置情報の取得に失敗しました: \(error.localizedDescription)"
         }
-        
+
         // 非同期コールバックのエラー処理
         if let completion = locationCompletion {
             completion(.failure(error))
@@ -246,7 +245,7 @@ extension LocationService: CLLocationManagerDelegate {
     
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         authorizationStatus = status
-        
+
         switch status {
         case .authorizedWhenInUse, .authorizedAlways:
             startLocationUpdates()

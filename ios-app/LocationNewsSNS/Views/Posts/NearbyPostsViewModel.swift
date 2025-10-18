@@ -139,6 +139,8 @@ class NearbyPostsViewModel: ObservableObject {
                 AppLogger.error("PostServiceのキャストに失敗")
             }
 
+            // ピンの配置が完了するまで少し待つ（UIの更新を反映）
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3秒
             isLoading = false
         } catch {
             AppLogger.error("エラー: \(error.localizedDescription)")
