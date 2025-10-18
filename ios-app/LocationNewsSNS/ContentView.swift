@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var showingPostCreation = false
     @State private var selectedPost: Post?
     @State private var showingPostDetail = false
+    @State private var selectedPinPost: Post? // ピン選択時の吹き出し表示用
     @EnvironmentObject private var viewModel: NearbyPostsViewModel
 
     // マップスクロール監視用
@@ -51,19 +52,44 @@ struct ContentView: View {
                             latitude: post.latitude ?? 35.6812,
                             longitude: post.longitude ?? 139.7671
                         )) {
-                            // 簡素化されたアノテーションビュー
-                            Image(systemName: post.isUrgent ? "exclamationmark.triangle.fill" : "mappin.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(post.isUrgent ? .red : .blue)
-                                .background(
-                                    Circle()
-                                        .fill(.white)
-                                        .frame(width: 28, height: 28)
-                                )
-                                .onTapGesture {
-                                    selectedPost = post
-                                    showingPostDetail = true
+                            ZStack {
+                                // ピン
+                                Image(systemName: post.isUrgent ? "exclamationmark.triangle.fill" : "mappin.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(
+                                        selectedPinPost?.id == post.id ? .orange :
+                                        (post.isUrgent ? .red : .blue)
+                                    )
+                                    .background(
+                                        Circle()
+                                            .fill(.white)
+                                            .frame(width: 28, height: 28)
+                                    )
+                                    .scaleEffect(selectedPinPost?.id == post.id ? 2.0 : 1.0)
+                                    .onTapGesture {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            if selectedPinPost?.id == post.id {
+                                                // 同じピンをタップしたら閉じる
+                                                selectedPinPost = nil
+                                            } else {
+                                                // 別のピンをタップしたら選択
+                                                selectedPinPost = post
+                                            }
+                                        }
+                                    }
+
+                                // 吹き出し（選択時のみ表示）
+                                if selectedPinPost?.id == post.id {
+                                    MapPinCalloutView(post: post) {
+                                        // 吹き出しタップで詳細画面を表示
+                                        selectedPost = post
+                                        showingPostDetail = true
+                                    }
+                                    .offset(y: -140) // ピンの上に配置（絶対位置）
+                                    .transition(.scale.combined(with: .opacity))
+                                    .zIndex(1)
                                 }
+                            }
                         }
                     }
                     .overlay(
@@ -123,7 +149,7 @@ struct ContentView: View {
                         Spacer()
 
                         // Liquid Glass エフェクトのボトムシート
-                        PostListBottomSheet(viewModel: viewModel, region: $region)
+                        PostListBottomSheet(viewModel: viewModel, region: $region, selectedPinPost: $selectedPinPost)
                     }
                 }
                 .sheet(isPresented: $showingPostCreation) {
@@ -210,6 +236,7 @@ struct ContentView: View {
 struct PostListBottomSheet: View {
     @ObservedObject var viewModel: NearbyPostsViewModel
     @Binding var region: MKCoordinateRegion
+    @Binding var selectedPinPost: Post?
     @State private var selectedPost: Post?
     @State private var scrollPosition: UUID?
 
@@ -234,6 +261,7 @@ struct PostListBottomSheet: View {
 
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                         selectedPost = post
+                                        selectedPinPost = post // ピンの状態も更新
                                         scrollPosition = post.id
 
                                         // カードを中央にスクロール
@@ -745,6 +773,130 @@ struct MapCircleOverlay: View {
             )
         }
         .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Map Pin Callout View
+struct MapPinCalloutView: View {
+    let post: Post
+    let onTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // ユーザー情報
+            HStack(spacing: 8) {
+                if let avatarURL = post.user.avatarURL, let url = URL(string: avatarURL) {
+                    CachedAsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        Image(systemName: "person.circle.fill")
+                            .foregroundColor(.gray)
+                    }
+                    .frame(width: 24, height: 24)
+                    .clipShape(Circle())
+                } else {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.gray)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(post.user.displayName ?? post.user.username)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+
+                    Text(post.createdAt.formatted(.relative(presentation: .named)))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                if post.user.isVerified {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundColor(.blue)
+                        .font(.caption2)
+                }
+            }
+
+            // 投稿内容プレビュー
+            Text(post.content)
+                .font(.caption)
+                .lineLimit(2)
+                .foregroundColor(.primary)
+
+            // バッジとエンゲージメント
+            HStack(spacing: 8) {
+                if post.isUrgent {
+                    Label("緊急", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.red)
+                        .cornerRadius(4)
+                }
+
+                if post.isVerified {
+                    Label("検証済み", systemImage: "checkmark.seal.fill")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue)
+                        .cornerRadius(4)
+                }
+
+                Spacer()
+
+                HStack(spacing: 12) {
+                    Label("\(post.likeCount)", systemImage: "heart.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+
+                    Label("\(post.commentCount)", systemImage: "bubble.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 220)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+        .onTapGesture {
+            onTap()
+        }
+        // 吹き出しの下にある三角形
+        .overlay(alignment: .bottom) {
+            Triangle()
+                .fill(Color(.systemBackground))
+                .frame(width: 20, height: 10)
+                .offset(y: 10)
+                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 2)
+        }
+    }
+}
+
+// 三角形の形状
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
     }
 }
 
