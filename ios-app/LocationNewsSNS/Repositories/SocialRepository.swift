@@ -38,38 +38,45 @@ protocol SocialRepositoryProtocol {
 
 class SocialRepository: SocialRepositoryProtocol {
     private let supabase = SupabaseConfig.shared.client
-    private let currentUserID: UUID
-    
-    init(currentUserID: UUID) {
-        self.currentUserID = currentUserID
+
+    init() {}
+
+    // 現在のユーザーIDを動的に取得
+    private func getCurrentUserID() async throws -> UUID {
+        let session = try await supabase.auth.session
+        return session.user.id
     }
     
     // MARK: - フォロー関連
     
     func followUser(userID: UUID) async throws {
+        let currentUserID = try await getCurrentUserID()
+
         let followRequest = [
             "follower_id": currentUserID.uuidString,
             "following_id": userID.uuidString,
             "created_at": Date().iso8601String
         ]
-        
+
         try await supabase
             .from("follows")
             .insert(followRequest)
             .execute()
-        
+
         // 統計情報を更新
         await updateFollowStats(followerID: currentUserID, followingID: userID, isFollowing: true)
     }
     
     func unfollowUser(userID: UUID) async throws {
+        let currentUserID = try await getCurrentUserID()
+
         try await supabase
             .from("follows")
             .delete()
             .eq("follower_id", value: currentUserID.uuidString)
             .eq("following_id", value: userID.uuidString)
             .execute()
-        
+
         // 統計情報を更新
         await updateFollowStats(followerID: currentUserID, followingID: userID, isFollowing: false)
     }
@@ -85,7 +92,7 @@ class SocialRepository: SocialRepositoryProtocol {
         
         let response = try await supabase
             .from("follows")
-            .select("follower:user_profiles!follower_id(*)")
+            .select("follower:users!follower_id(*)")
             .eq("following_id", value: userID.uuidString)
             .order("created_at", ascending: false)
             .execute()
@@ -105,7 +112,7 @@ class SocialRepository: SocialRepositoryProtocol {
         
         let response = try await supabase
             .from("follows")
-            .select("following:user_profiles!following_id(*)")
+            .select("following:users!following_id(*)")
             .eq("follower_id", value: userID.uuidString)
             .order("created_at", ascending: false)
             .execute()
@@ -115,15 +122,16 @@ class SocialRepository: SocialRepositoryProtocol {
     }
     
     func checkFollowStatus(userID: UUID) async throws -> Bool {
+        let currentUserID = try await getCurrentUserID()
+
         let response = try await supabase
             .from("follows")
-            .select("id")
+            .select("id", head: false, count: .exact)
             .eq("follower_id", value: currentUserID.uuidString)
             .eq("following_id", value: userID.uuidString)
-            .single()
             .execute()
-        
-        return response.data != nil
+
+        return (response.count ?? 0) > 0
     }
     
     func getSocialStats(userID: UUID) async throws -> SocialStats {
@@ -148,33 +156,55 @@ class SocialRepository: SocialRepositoryProtocol {
             .eq("user_id", value: userID.uuidString)
             .execute()
         
-        // いいね受信数
-        let likesResponse = try await supabase
-            .from("likes")
-            .select("id", head: false, count: .exact)
-            .eq("post_id", value: "(SELECT id FROM posts WHERE user_id = '\(userID.uuidString)')")
+        // いいね受信数とコメント受信数は、投稿IDリストを先に取得してから集計
+        let userPostsResponse = try await supabase
+            .from("posts")
+            .select("id")
+            .eq("user_id", value: userID.uuidString)
             .execute()
-        
-        // コメント受信数
-        let commentsResponse = try await supabase
-            .from("comments")
-            .select("id", head: false, count: .exact)
-            .eq("post_id", value: "(SELECT id FROM posts WHERE user_id = '\(userID.uuidString)')")
-            .execute()
+
+        struct PostIDOnly: Codable {
+            let id: UUID
+        }
+        let postIDs = (try? JSONDecoder().decode([PostIDOnly].self, from: userPostsResponse.data)) ?? []
+        let postIDStrings = postIDs.map { $0.id.uuidString }
+
+        var likesCount = 0
+        var commentsCount = 0
+
+        if !postIDStrings.isEmpty {
+            // いいね受信数
+            let likesResponse = try await supabase
+                .from("likes")
+                .select("id", head: false, count: .exact)
+                .in("post_id", value: postIDStrings)
+                .execute()
+            likesCount = likesResponse.count ?? 0
+
+            // コメント受信数
+            let commentsResponse = try await supabase
+                .from("comments")
+                .select("id", head: false, count: .exact)
+                .in("post_id", value: postIDStrings)
+                .execute()
+            commentsCount = commentsResponse.count ?? 0
+        }
         
         return SocialStats(
             userID: userID,
             followersCount: followersResponse.count ?? 0,
             followingCount: followingResponse.count ?? 0,
             postsCount: postsResponse.count ?? 0,
-            totalLikesReceived: likesResponse.count ?? 0,
-            totalCommentsReceived: commentsResponse.count ?? 0
+            totalLikesReceived: likesCount,
+            totalCommentsReceived: commentsCount
         )
     }
     
     // MARK: - コメント関連
     
     func createComment(_ request: CreateCommentRequest) async throws -> Comment {
+        let currentUserID = try await getCurrentUserID()
+
         let commentData = [
             "post_id": request.postID.uuidString,
             "user_id": currentUserID.uuidString,
@@ -183,16 +213,18 @@ class SocialRepository: SocialRepositoryProtocol {
             "created_at": Date().iso8601String,
             "updated_at": Date().iso8601String
         ].compactMapValues { $0 }
-        
+
         let response = try await supabase
             .from("comments")
             .insert(commentData)
-            .select("*, user:user_profiles(*)")
+            .select("*, user:users(*)")
             .single()
             .execute()
-        
-        // TODO: JSONからCommentにデコード
-        let comment = try JSONDecoder().decode(Comment.self, from: response.data)
+
+        // ISO8601形式の日付をデコードするためにJSONDecoderを設定
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let comment = try decoder.decode(Comment.self, from: response.data)
         
         // 投稿のコメント数を更新
         await updatePostCommentsCount(postID: request.postID, increment: true)
@@ -203,58 +235,82 @@ class SocialRepository: SocialRepositoryProtocol {
     func getComments(postID: UUID, limit: Int = 20, offset: Int = 0) async throws -> [Comment] {
         let response = try await supabase
             .from("comments")
-            .select("*, user:user_profiles(*)")
+            .select("*, user:users(*)")
             .eq("post_id", value: postID.uuidString)
-            .`is`("parent_comment_id", value: true) // トップレベルコメントのみ (is null)
+            .`is`("parent_comment_id", value: nil) // トップレベルコメントのみ (is null)
             .order("created_at", ascending: false)
             .range(from: offset, to: offset + limit - 1)
             .execute()
-        
-        // TODO: JSONから[Comment]にデコード
-        return try JSONDecoder().decode([Comment].self, from: response.data)
+
+        // ISO8601形式の日付をデコードするためにJSONDecoderを設定
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode([Comment].self, from: response.data)
     }
     
     func getReplies(commentID: UUID) async throws -> [Comment] {
         let response = try await supabase
             .from("comments")
-            .select("*, user:user_profiles(*)")
+            .select("*, user:users(*)")
             .eq("parent_comment_id", value: commentID.uuidString)
             .order("created_at", ascending: true)
             .execute()
-        
-        // TODO: JSONから[Comment]にデコード
-        return try JSONDecoder().decode([Comment].self, from: response.data)
+
+        // ISO8601形式の日付をデコードするためにJSONDecoderを設定
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode([Comment].self, from: response.data)
     }
     
     func likeComment(commentID: UUID) async throws {
+        let currentUserID = try await getCurrentUserID()
+
+        // 既にいいねしているかチェック
+        let checkResponse = try await supabase
+            .from("likes")
+            .select("id", head: false, count: .exact)
+            .eq("user_id", value: currentUserID.uuidString)
+            .eq("comment_id", value: commentID.uuidString)
+            .limit(1)
+            .execute()
+
+        // 既にいいねが存在する場合は何もしない
+        if (checkResponse.count ?? 0) > 0 {
+            return
+        }
+
         let likeData = [
             "user_id": currentUserID.uuidString,
             "comment_id": commentID.uuidString,
             "created_at": Date().iso8601String
         ]
-        
+
         try await supabase
             .from("likes")
             .insert(likeData)
             .execute()
-        
+
         // コメントのいいね数を更新
         await updateCommentLikesCount(commentID: commentID, increment: true)
     }
     
     func unlikeComment(commentID: UUID) async throws {
+        let currentUserID = try await getCurrentUserID()
+
         try await supabase
             .from("likes")
             .delete()
             .eq("user_id", value: currentUserID.uuidString)
             .eq("comment_id", value: commentID.uuidString)
             .execute()
-        
+
         // コメントのいいね数を更新
         await updateCommentLikesCount(commentID: commentID, increment: false)
     }
     
     func deleteComment(commentID: UUID) async throws {
+        let currentUserID = try await getCurrentUserID()
+
         // コメントを削除
         try await supabase
             .from("comments")
@@ -262,7 +318,7 @@ class SocialRepository: SocialRepositoryProtocol {
             .eq("id", value: commentID.uuidString)
             .eq("user_id", value: currentUserID.uuidString) // 自分のコメントのみ削除可能
             .execute()
-        
+
         // 関連するいいねも削除
         try await supabase
             .from("likes")
@@ -274,29 +330,61 @@ class SocialRepository: SocialRepositoryProtocol {
     // MARK: - いいね関連
     
     func likePost(postID: UUID) async throws {
+        let currentUserID = try await getCurrentUserID()
+
+        // 既にいいねしているかチェック
+        let checkResponse = try await supabase
+            .from("likes")
+            .select("id", head: false, count: .exact)
+            .eq("user_id", value: currentUserID.uuidString)
+            .eq("post_id", value: postID.uuidString)
+            .limit(1)
+            .execute()
+
+        // 既にいいねが存在する場合は何もしない
+        if (checkResponse.count ?? 0) > 0 {
+            return
+        }
+
         let likeData = [
             "user_id": currentUserID.uuidString,
             "post_id": postID.uuidString,
             "created_at": Date().iso8601String
         ]
-        
+
         try await supabase
             .from("likes")
             .insert(likeData)
             .execute()
-        
+
         // 投稿のいいね数を更新
         await updatePostLikesCount(postID: postID, increment: true)
     }
     
     func unlikePost(postID: UUID) async throws {
+        let currentUserID = try await getCurrentUserID()
+
+        // いいねが存在するか確認
+        let checkResponse = try await supabase
+            .from("likes")
+            .select("id", head: false, count: .exact)
+            .eq("user_id", value: currentUserID.uuidString)
+            .eq("post_id", value: postID.uuidString)
+            .limit(1)
+            .execute()
+
+        // いいねが存在しない場合は何もしない
+        if (checkResponse.count ?? 0) == 0 {
+            return
+        }
+
         try await supabase
             .from("likes")
             .delete()
             .eq("user_id", value: currentUserID.uuidString)
             .eq("post_id", value: postID.uuidString)
             .execute()
-        
+
         // 投稿のいいね数を更新
         await updatePostLikesCount(postID: postID, increment: false)
     }
@@ -304,11 +392,11 @@ class SocialRepository: SocialRepositoryProtocol {
     func getLikes(postID: UUID) async throws -> [Like] {
         let response = try await supabase
             .from("likes")
-            .select("*, user:user_profiles(*)")
+            .select("*, user:users(*)")
             .eq("post_id", value: postID.uuidString)
             .order("created_at", ascending: false)
             .execute()
-        
+
         // TODO: JSONから[Like]にデコード
         return try JSONDecoder().decode([Like].self, from: response.data)
     }
@@ -316,10 +404,12 @@ class SocialRepository: SocialRepositoryProtocol {
     // MARK: - 活動フィード
     
     func getActivityFeed(limit: Int = 20, offset: Int = 0) async throws -> [ActivityFeedItem] {
+        let currentUserID = try await getCurrentUserID()
+
         let response = try await supabase
             .from("activity_feed")
             .select("""
-                *, 
+                *,
                 actor_user:user_profiles!actor_user_id(*),
                 target_post:posts(*),
                 target_comment:comments(*),
@@ -335,6 +425,8 @@ class SocialRepository: SocialRepositoryProtocol {
     }
     
     func markActivityAsRead(activityID: UUID) async throws {
+        let currentUserID = try await getCurrentUserID()
+
         try await supabase
             .from("activity_feed")
             .update(["is_read": true])
@@ -346,6 +438,8 @@ class SocialRepository: SocialRepositoryProtocol {
     // MARK: - ユーザー検索
     
     func searchUsers(query: String, limit: Int = 20) async throws -> [UserSearchResult] {
+        let currentUserID = try await getCurrentUserID()
+
         let response = try await supabase
             .from("user_profiles")
             .select("*")
@@ -360,6 +454,8 @@ class SocialRepository: SocialRepositoryProtocol {
     }
     
     func getSuggestedUsers(limit: Int = 10) async throws -> [UserProfile] {
+        let currentUserID = try await getCurrentUserID()
+
         // フォローしていないユーザーを取得
         let response = try await supabase
             .from("user_profiles")

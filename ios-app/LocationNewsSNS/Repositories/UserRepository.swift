@@ -317,9 +317,9 @@ struct UserResponse: Codable {
     let avatarURL: String?
     let coverURL: String?
     let location: String?
-    let locationPrecision: String
+    let locationPrecision: String?
     let isVerified: Bool
-    let isOfficial: Bool
+    let isOfficial: Bool?
     let role: String
     let privacySettings: [String: String]?
     let createdAt: String
@@ -346,15 +346,63 @@ struct UserResponse: Codable {
     }
     
     func toUserProfile() throws -> UserProfile {
-        let dateFormatter = ISO8601DateFormatter()
-        
-        guard let createdDate = dateFormatter.date(from: createdAt),
-              let updatedDate = dateFormatter.date(from: updatedAt) else {
-            throw RepositoryError.invalidDateFormat
+        // 柔軟な日付パース処理（失敗時は現在時刻を返す）
+        func parseDate(_ dateString: String, fieldName: String) -> Date {
+            // ISO8601形式でパース（複数のバリエーションに対応）
+            let formatters: [ISO8601DateFormatter] = [
+                {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    return formatter
+                }(),
+                {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime]
+                    return formatter
+                }(),
+                {
+                    let formatter = ISO8601DateFormatter()
+                    return formatter
+                }()
+            ]
+
+            for formatter in formatters {
+                if let date = formatter.date(from: dateString) {
+                    return date
+                }
+            }
+
+            // DateFormatterでもう一度試す（PostgreSQLのタイムスタンプフォーマット対応）
+            let dateFormatter = DateFormatter()
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+
+            let formats = [
+                "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ",
+                "yyyy-MM-dd'T'HH:mm:ssZ",
+                "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd HH:mm:ss.SSSSSSZ",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS",
+                "yyyy-MM-dd HH:mm:ssZ",
+                "yyyy-MM-dd HH:mm:ss"
+            ]
+
+            for format in formats {
+                dateFormatter.dateFormat = format
+                if let date = dateFormatter.date(from: dateString) {
+                    return date
+                }
+            }
+
+            print("⚠️ [WARNING] Failed to parse \(fieldName): '\(dateString)' - using current date as fallback")
+            return Date()
         }
-        
-        let lastActiveDate = lastActiveAt.flatMap { dateFormatter.date(from: $0) }
-        
+
+        let createdDate = parseDate(createdAt, fieldName: "createdAt")
+        let updatedDate = parseDate(updatedAt, fieldName: "updatedAt")
+        let lastActiveDate = lastActiveAt.map { parseDate($0, fieldName: "lastActiveAt") }
+
         // プライバシー設定をデコード
         var privacySettings: PrivacySettings?
         if let settingsDict = self.privacySettings, let jsonString = settingsDict["data"] {
@@ -367,7 +415,7 @@ struct UserResponse: Codable {
         } else {
             privacySettings = PrivacySettings.default
         }
-        
+
         return UserProfile(
             id: id,
             email: email,

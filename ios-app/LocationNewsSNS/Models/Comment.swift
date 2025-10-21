@@ -8,25 +8,50 @@ struct Comment: Identifiable, Codable {
     let user: UserProfile
     let content: String
     let parentCommentID: UUID? // 返信の場合
-    let likesCount: Int
-    let repliesCount: Int
-    let isLikedByCurrentUser: Bool
+    let likeCount: Int
     let createdAt: Date
     let updatedAt: Date
-    
+
+    // 計算プロパティ（DBには存在しない）
+    var repliesCount: Int = 0  // デフォルト値、後で取得して更新可能
+    var isLikedByCurrentUser: Bool = false  // デフォルト値、後で取得して更新可能
+
     enum CodingKeys: String, CodingKey {
         case id
         case postID = "post_id"
         case user
         case content
         case parentCommentID = "parent_comment_id"
-        case likesCount = "likes_count"
-        case repliesCount = "replies_count"
-        case isLikedByCurrentUser = "is_liked_by_current_user"
+        case likeCount = "like_count"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
-    
+
+    // 通常のイニシャライザ（コードから直接生成する場合）
+    init(
+        id: UUID,
+        postID: UUID,
+        user: UserProfile,
+        content: String,
+        parentCommentID: UUID? = nil,
+        likeCount: Int = 0,
+        repliesCount: Int = 0,
+        isLikedByCurrentUser: Bool = false,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.postID = postID
+        self.user = user
+        self.content = content
+        self.parentCommentID = parentCommentID
+        self.likeCount = likeCount
+        self.repliesCount = repliesCount
+        self.isLikedByCurrentUser = isLikedByCurrentUser
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
     // 返信かどうか
     var isReply: Bool {
         return parentCommentID != nil

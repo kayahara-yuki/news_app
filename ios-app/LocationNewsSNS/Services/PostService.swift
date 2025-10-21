@@ -146,13 +146,16 @@ class PostService: ObservableObject, PostServiceProtocol {
     func likePost(id: UUID) async {
         do {
             try await postRepository.likePost(id: id)
-            
+
             await MainActor.run {
                 // ローカルリストのいいね数を更新
                 updateLocalPostLikeCount(postID: id, increment: true)
                 self.errorMessage = nil
             }
-            
+
+            // いいね後、サーバーから最新データを取得して同期
+            await refreshPost(id: id)
+
         } catch {
             print("いいねエラー: \(error)")
             await MainActor.run {
@@ -165,13 +168,16 @@ class PostService: ObservableObject, PostServiceProtocol {
     func unlikePost(id: UUID) async {
         do {
             try await postRepository.unlikePost(id: id)
-            
+
             await MainActor.run {
                 // ローカルリストのいいね数を更新
                 updateLocalPostLikeCount(postID: id, increment: false)
                 self.errorMessage = nil
             }
-            
+
+            // いいね解除後、サーバーから最新データを取得して同期
+            await refreshPost(id: id)
+
         } catch {
             print("いいね取り消しエラー: \(error)")
             await MainActor.run {
@@ -179,7 +185,30 @@ class PostService: ObservableObject, PostServiceProtocol {
             }
         }
     }
-    
+
+    /// 投稿のいいね状態をチェック
+    func checkLikeStatus(postID: UUID, userID: UUID) async -> Bool {
+        do {
+            return try await postRepository.hasUserLikedPost(id: postID, userID: userID)
+        } catch {
+            print("いいね状態チェックエラー: \(error)")
+            return false
+        }
+    }
+
+    /// 投稿を取得
+    func getPost(id: UUID) async -> Post? {
+        do {
+            return try await postRepository.getPost(id: id)
+        } catch {
+            print("投稿取得エラー: \(error)")
+            await MainActor.run {
+                self.errorMessage = "投稿の取得に失敗しました: \(error.localizedDescription)"
+            }
+            return nil
+        }
+    }
+
     /// 投稿を削除
     func deletePost(id: UUID) async {
         do {
@@ -201,6 +230,27 @@ class PostService: ObservableObject, PostServiceProtocol {
     }
     
     // MARK: - Private Methods
+
+    /// サーバーから投稿の最新データを取得してローカル配列を更新
+    private func refreshPost(id: UUID) async {
+        do {
+            let updatedPost = try await postRepository.getPost(id: id)
+
+            await MainActor.run {
+                // nearbyPosts配列を更新
+                if let index = nearbyPosts.firstIndex(where: { $0.id == id }) {
+                    nearbyPosts[index] = updatedPost
+                }
+
+                // posts配列を更新
+                if let index = posts.firstIndex(where: { $0.id == id }) {
+                    posts[index] = updatedPost
+                }
+            }
+        } catch {
+            print("⚠️ [WARNING] PostService.refreshPost - 投稿の再取得に失敗: \(error)")
+        }
+    }
 
     // パフォーマンス最適化: 重複コードを削減し、効率的な更新を実現
     private func updateLocalPostLikeCount(postID: UUID, increment: Bool) {

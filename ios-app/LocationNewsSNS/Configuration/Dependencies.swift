@@ -81,7 +81,9 @@ class DependencyContainer: ObservableObject {
     private lazy var _mediaUploadService: MediaUploadService = MediaUploadService()
     private lazy var _imagePickerService: ImagePickerService = ImagePickerService()
     private lazy var _mediaProcessingService: MediaProcessingService = MediaProcessingService()
-    
+    private lazy var _commentService: CommentService = CommentService()
+    private lazy var _socialService: SocialService = SocialService()
+
     // MARK: - Repository Protocols
     private lazy var _userRepository: UserRepositoryProtocol = UserRepository()
     private lazy var _postRepository: PostRepositoryProtocol = PostRepository()
@@ -131,7 +133,9 @@ class DependencyContainer: ObservableObject {
     var mediaUploadService: MediaUploadService { _mediaUploadService }
     var imagePickerService: ImagePickerService { _imagePickerService }
     var mediaProcessingService: MediaProcessingService { _mediaProcessingService }
-    
+    var commentService: CommentService { _commentService }
+    var socialService: SocialService { _socialService }
+
     // MARK: - Repository Access
     
     var userRepository: any UserRepositoryProtocol { _userRepository }
@@ -224,6 +228,8 @@ struct DependencyInjection: ViewModifier {
             .environmentObject(container.mediaUploadService)
             .environmentObject(container.imagePickerService)
             .environmentObject(container.mediaProcessingService)
+            .environmentObject(container.commentService)
+            .environmentObject(container.socialService)
             .environment(\.dependencies, container)
     }
 }

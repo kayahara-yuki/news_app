@@ -204,8 +204,28 @@ struct MapView: UIViewRepresentable {
             mapView.addAnnotations(annotationsToAdd)
         }
 
-        // Note: 既に存在するアノテーションは再利用されるため、更新不要
-        // MapKitが自動的にアノテーションビューを再利用します
+        // 既存のアノテーションのうち、いいね数などが変更された可能性があるものを更新
+        // PostAnnotationはクラスなのでPostオブジェクトが更新されても参照は同じ
+        // そのため、いいね数などが変更された投稿は削除→再追加して更新
+        let postsMap = Dictionary(uniqueKeysWithValues: posts.map { ($0.id, $0) })
+        let annotationsToUpdate = existingPostAnnotations.filter { annotation in
+            guard let updatedPost = postsMap[annotation.post.id] else { return false }
+            // いいね数、コメント数、シェア数が異なる場合は更新が必要
+            return annotation.post.likeCount != updatedPost.likeCount ||
+                   annotation.post.commentCount != updatedPost.commentCount ||
+                   annotation.post.shareCount != updatedPost.shareCount
+        }
+
+        if !annotationsToUpdate.isEmpty {
+            // 更新が必要なアノテーションを削除
+            mapView.removeAnnotations(annotationsToUpdate)
+            // 最新データで再作成して追加
+            let updatedAnnotations = annotationsToUpdate.compactMap { oldAnnotation -> PostAnnotation? in
+                guard let updatedPost = postsMap[oldAnnotation.post.id] else { return nil }
+                return PostAnnotation(post: updatedPost)
+            }
+            mapView.addAnnotations(updatedAnnotations)
+        }
 
         // 緊急事態のアノテーションを追加
         if showEmergencies {

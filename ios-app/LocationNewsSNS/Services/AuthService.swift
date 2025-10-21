@@ -68,7 +68,7 @@ class AuthService: ObservableObject, AuthServiceProtocol {
             let session = try await supabase.auth.session
             await handleSignIn(session: session)
         } catch {
-            print("既存セッションの確認エラー: \(error)")
+            print("❌ [ERROR] AuthService - 既存セッションの確認エラー: \(error)")
             await handleSignOut()
         }
     }

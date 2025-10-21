@@ -17,10 +17,8 @@ class CommentService: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var commentChannel: RealtimeChannelV2?
     
-    init(socialRepository: SocialRepositoryProtocol? = nil, authService: AuthService? = nil) {
-        // AuthServiceから現在のユーザーIDを取得
-        let currentUserID = authService?.currentUser?.id ?? UUID()
-        self.socialRepository = socialRepository ?? SocialRepository(currentUserID: currentUserID)
+    init(socialRepository: SocialRepositoryProtocol? = nil) {
+        self.socialRepository = socialRepository ?? SocialRepository()
         self.realtimeService = RealtimeService()
         setupRealtimeSubscriptions()
     }
@@ -62,21 +60,27 @@ class CommentService: ObservableObject {
             )
             
             let newComment = try await socialRepository.createComment(request)
-            
+
             // ローカル状態を更新
             if parentCommentID == nil {
                 // トップレベルコメント
                 if comments[postID] == nil {
                     comments[postID] = []
                 }
-                comments[postID]?.insert(newComment, at: 0)
+                // 既に同じIDのコメントが存在しないか確認
+                if !comments[postID]!.contains(where: { $0.id == newComment.id }) {
+                    comments[postID]?.insert(newComment, at: 0)
+                }
             } else {
                 // 返信コメント
                 if let parentID = parentCommentID {
                     if replies[parentID] == nil {
                         replies[parentID] = []
                     }
-                    replies[parentID]?.append(newComment)
+                    // 既に同じIDの返信が存在しないか確認
+                    if !replies[parentID]!.contains(where: { $0.id == newComment.id }) {
+                        replies[parentID]?.append(newComment)
+                    }
                 }
             }
             
@@ -103,25 +107,30 @@ class CommentService: ObservableObject {
         if refresh {
             comments[postID] = []
         }
-        
+
         isLoading = true
         defer { isLoading = false }
-        
+
         do {
             let postComments = try await socialRepository.getComments(
                 postID: postID,
                 limit: 20,
                 offset: comments[postID]?.count ?? 0
             )
-            
+
             if comments[postID] == nil {
                 comments[postID] = postComments
             } else {
-                comments[postID]?.append(contentsOf: postComments)
+                // 既存のコメントIDを取得
+                let existingIDs = Set(comments[postID]?.map { $0.id } ?? [])
+
+                // 重複を除外して新しいコメントのみを追加
+                let newComments = postComments.filter { !existingIDs.contains($0.id) }
+                comments[postID]?.append(contentsOf: newComments)
             }
-            
+
             errorMessage = nil
-            
+
         } catch {
             print("コメント取得エラー: \(error)")
             errorMessage = "コメントの取得に失敗しました: \(error.localizedDescription)"
@@ -132,12 +141,21 @@ class CommentService: ObservableObject {
     func loadReplies(commentID: UUID) async {
         isLoadingReplies = true
         defer { isLoadingReplies = false }
-        
+
         do {
             let commentReplies = try await socialRepository.getReplies(commentID: commentID)
-            replies[commentID] = commentReplies
+
+            // 既存の返信IDを取得して重複を除外
+            if replies[commentID] == nil {
+                replies[commentID] = commentReplies
+            } else {
+                let existingIDs = Set(replies[commentID]?.map { $0.id } ?? [])
+                let newReplies = commentReplies.filter { !existingIDs.contains($0.id) }
+                replies[commentID]?.append(contentsOf: newReplies)
+            }
+
             errorMessage = nil
-            
+
         } catch {
             print("返信取得エラー: \(error)")
             errorMessage = "返信の取得に失敗しました: \(error.localizedDescription)"

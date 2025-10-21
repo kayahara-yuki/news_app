@@ -32,6 +32,12 @@ class PostRepository: PostRepositoryProtocol {
     private let nearbyPostsCache = NSCache<NSString, CachedPosts>()
     private let cacheTTL: TimeInterval = 60 // 1分(リアルタイム性向上)
 
+    // 現在のユーザーIDを動的に取得
+    private func getCurrentUserID() async throws -> UUID {
+        let session = try await supabase.auth.session
+        return session.user.id
+    }
+
     nonisolated func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double = 10000) async throws -> [Post] {
         // キャッシュキーの生成（位置情報を10m単位で丸める）
         let roundedLat = round(latitude * 10000) / 10000 // 約10m精度
@@ -83,7 +89,7 @@ class PostRepository: PostRepositoryProtocol {
             .from("posts")
             .select("""
                 *,
-                users!posts_user_id_fkey(id, username, display_name, avatar_url, is_verified, role, privacy_settings, email, bio, location, created_at, updated_at)
+                users!posts_user_id_fkey(id, username, display_name, avatar_url, is_verified, role, email, bio, location, created_at, updated_at)
             """)
             .eq("id", value: id)
             .single()
@@ -142,8 +148,21 @@ class PostRepository: PostRepositoryProtocol {
     }
     
     func likePost(id: UUID) async throws {
-        // TODO: 現在のユーザーIDを取得
-        let userID = UUID() // 仮のID
+        let userID = try await getCurrentUserID()
+
+        // 既にいいねしているかチェック
+        let checkResponse = try await supabase
+            .from("likes")
+            .select("id", head: false, count: .exact)
+            .eq("post_id", value: id)
+            .eq("user_id", value: userID)
+            .limit(1)
+            .execute()
+
+        // 既にいいねが存在する場合は何もしない
+        if (checkResponse.count ?? 0) > 0 {
+            return
+        }
 
         let likeRequest = PostLikeRequest(
             postID: id,
@@ -154,31 +173,30 @@ class PostRepository: PostRepositoryProtocol {
             .from("likes")
             .insert(likeRequest)
             .execute()
-
-        // いいね数を更新
-        try await supabase
-            .from("posts")
-            .update(["like_count": "like_count + 1"])
-            .eq("id", value: id)
-            .execute()
     }
     
     func unlikePost(id: UUID) async throws {
-        // TODO: 現在のユーザーIDを取得
-        let userID = UUID() // 仮のID
+        let userID = try await getCurrentUserID()
+
+        // いいねが存在するか確認
+        let checkResponse = try await supabase
+            .from("likes")
+            .select("id", head: false, count: .exact)
+            .eq("post_id", value: id)
+            .eq("user_id", value: userID)
+            .limit(1)
+            .execute()
+
+        // いいねが存在しない場合は何もしない
+        if (checkResponse.count ?? 0) == 0 {
+            return
+        }
 
         try await supabase
             .from("likes")
             .delete()
             .eq("post_id", value: id)
             .eq("user_id", value: userID)
-            .execute()
-
-        // いいね数を更新
-        try await supabase
-            .from("posts")
-            .update(["like_count": "like_count - 1"])
-            .eq("id", value: id)
             .execute()
     }
     
@@ -191,16 +209,15 @@ class PostRepository: PostRepositoryProtocol {
     }
     
     func reportPost(id: UUID, reason: String) async throws {
-        // TODO: 現在のユーザーIDを取得
-        let userID = UUID() // 仮のID
-        
+        let userID = try await getCurrentUserID()
+
         let reportRequest = PostReportRequest(
             postID: id,
             userID: userID,
             reason: reason,
             reportedAt: Date()
         )
-        
+
         try await supabase
             .from("post_reports")
             .insert(reportRequest)
@@ -259,16 +276,16 @@ class PostRepository: PostRepositoryProtocol {
     }
     
     func hasUserLikedPost(id: UUID, userID: UUID) async throws -> Bool {
-        let response: [PostLikeResponse] = try await supabase
+        // シンプルなカウントクエリを使用
+        let response = try await supabase
             .from("likes")
-            .select("id")
+            .select("id", head: false, count: .exact)
             .eq("post_id", value: id)
             .eq("user_id", value: userID)
             .limit(1)
             .execute()
-            .value
 
-        return !response.isEmpty
+        return (response.count ?? 0) > 0
     }
     
     func getPostLikes(id: UUID, limit: Int, offset: Int) async throws -> [UserProfile] {
@@ -495,12 +512,63 @@ struct PostResponse: Decodable {
     }
     
     func toPost() throws -> Post {
-        let dateFormatter = ISO8601DateFormatter()
 
-        guard let createdDate = dateFormatter.date(from: createdAt),
-              let updatedDate = dateFormatter.date(from: updatedAt) else {
-            throw RepositoryError.invalidDateFormat
+        // 柔軟な日付パース処理（失敗時は現在時刻を返す）
+        func parseDate(_ dateString: String, fieldName: String) -> Date {
+            // ISO8601形式でパース（複数のバリエーションに対応）
+            let formatters: [ISO8601DateFormatter] = [
+                {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    return formatter
+                }(),
+                {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime]
+                    return formatter
+                }(),
+                {
+                    let formatter = ISO8601DateFormatter()
+                    return formatter
+                }()
+            ]
+
+            for formatter in formatters {
+                if let date = formatter.date(from: dateString) {
+                    print("✅ [DEBUG] Successfully parsed \(fieldName) with ISO8601")
+                    return date
+                }
+            }
+
+            // DateFormatterでもう一度試す（PostgreSQLのタイムスタンプフォーマット対応）
+            let dateFormatter = DateFormatter()
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+
+            let formats = [
+                "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ",
+                "yyyy-MM-dd'T'HH:mm:ssZ",
+                "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd HH:mm:ss.SSSSSSZ",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS",
+                "yyyy-MM-dd HH:mm:ssZ",
+                "yyyy-MM-dd HH:mm:ss"
+            ]
+
+            for format in formats {
+                dateFormatter.dateFormat = format
+                if let date = dateFormatter.date(from: dateString) {
+                    print("✅ [DEBUG] Successfully parsed \(fieldName) with format: \(format)")
+                    return date
+                }
+            }
+
+            return Date()
         }
+
+        let createdDate = parseDate(createdAt, fieldName: "createdAt")
+        let updatedDate = parseDate(updatedAt, fieldName: "updatedAt")
 
         guard let userResponse = user else {
             throw RepositoryError.decodingError
@@ -652,7 +720,7 @@ struct CommentResponse: Codable {
             user: userProfile,
             content: content,
             parentCommentID: nil, // TODO: 返信機能実装時に対応
-            likesCount: likeCount,
+            likeCount: likeCount,
             repliesCount: 0, // TODO: 返信機能実装時に対応
             isLikedByCurrentUser: false, // TODO: いいね状態取得機能実装時に対応
             createdAt: createdDate,
@@ -713,14 +781,64 @@ struct NearbyPostResponse: Decodable {
     }
 
     func toPost() throws -> Post {
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
-        guard let createdDate = dateFormatter.date(from: createdAt),
-              let updatedDate = dateFormatter.date(from: updatedAt) else {
-            AppLogger.error("日付パースエラー - createdAt: \(createdAt), updatedAt: \(updatedAt)")
-            throw RepositoryError.invalidDateFormat
+        // 柔軟な日付パース処理（失敗時は現在時刻を返す）
+        func parseDate(_ dateString: String, fieldName: String) -> Date {
+            // ISO8601形式でパース（複数のバリエーションに対応）
+            let formatters: [ISO8601DateFormatter] = [
+                {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    return formatter
+                }(),
+                {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime]
+                    return formatter
+                }(),
+                {
+                    let formatter = ISO8601DateFormatter()
+                    return formatter
+                }()
+            ]
+
+            for formatter in formatters {
+                if let date = formatter.date(from: dateString) {
+                    print("✅ [DEBUG] Successfully parsed \(fieldName) with ISO8601")
+                    return date
+                }
+            }
+
+            // DateFormatterでもう一度試す（PostgreSQLのタイムスタンプフォーマット対応）
+            let dateFormatter = DateFormatter()
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+
+            let formats = [
+                "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ",
+                "yyyy-MM-dd'T'HH:mm:ssZ",
+                "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd HH:mm:ss.SSSSSSZ",
+                "yyyy-MM-dd HH:mm:ss.SSSSSS",
+                "yyyy-MM-dd HH:mm:ssZ",
+                "yyyy-MM-dd HH:mm:ss"
+            ]
+
+            for format in formats {
+                dateFormatter.dateFormat = format
+                if let date = dateFormatter.date(from: dateString) {
+                    print("✅ [DEBUG] Successfully parsed \(fieldName) with format: \(format)")
+                    return date
+                }
+            }
+
+            print("⚠️ [WARNING] Failed to parse \(fieldName): '\(dateString)' - using current date as fallback")
+            return Date()
         }
+
+        let createdDate = parseDate(createdAt, fieldName: "createdAt")
+        let updatedDate = parseDate(updatedAt, fieldName: "updatedAt")
 
         let userProfile = UserProfile(
             id: userID,

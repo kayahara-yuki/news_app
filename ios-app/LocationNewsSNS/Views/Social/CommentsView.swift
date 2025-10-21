@@ -213,17 +213,17 @@ struct CommentsView: View {
     
     private func postComment() {
         guard canPostComment else { return }
-        
+
         let content = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
         let parentID = replyingTo?.id
-        
+
         Task {
             await commentService.createComment(
                 postID: post.id,
                 content: content,
                 parentCommentID: parentID
             )
-            
+
             // 成功した場合はフィールドをクリア
             if commentService.errorMessage == nil {
                 newCommentText = ""
@@ -347,9 +347,9 @@ struct CommentRowView: View {
                 HStack(spacing: 4) {
                     Image(systemName: comment.isLikedByCurrentUser ? "heart.fill" : "heart")
                         .foregroundColor(comment.isLikedByCurrentUser ? .red : .gray)
-                    
-                    if comment.likesCount > 0 {
-                        Text("\(comment.likesCount)")
+
+                    if comment.likeCount > 0 {
+                        Text("\(comment.likeCount)")
                             .font(.caption)
                             .foregroundColor(.gray)
                     }
@@ -496,9 +496,9 @@ struct ReplyRowView: View {
                         Image(systemName: reply.isLikedByCurrentUser ? "heart.fill" : "heart")
                             .foregroundColor(reply.isLikedByCurrentUser ? .red : .gray)
                             .font(.caption2)
-                        
-                        if reply.likesCount > 0 {
-                            Text("\(reply.likesCount)")
+
+                        if reply.likeCount > 0 {
+                            Text("\(reply.likeCount)")
                                 .font(.caption2)
                                 .foregroundColor(.gray)
                         }

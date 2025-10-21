@@ -15,11 +15,13 @@ class SupabaseConfig {
         guard let url = URL(string: supabaseURL) else {
             fatalError("Invalid Supabase URL")
         }
-        
-        return SupabaseClient(
+
+        let client = SupabaseClient(
             supabaseURL: url,
             supabaseKey: supabaseAnonKey
         )
+
+        return client
     }()
     
     private init() {}
