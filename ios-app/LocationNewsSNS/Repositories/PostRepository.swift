@@ -96,7 +96,8 @@ class PostRepository: PostRepositoryProtocol {
             .execute()
             .value
 
-        return try response.toPost()
+        let post = try response.toPost()
+        return post
     }
     
     func createPost(_ request: CreatePostRequest) async throws -> Post {
@@ -533,13 +534,6 @@ struct PostResponse: Decodable {
                 }()
             ]
 
-            for formatter in formatters {
-                if let date = formatter.date(from: dateString) {
-                    print("✅ [DEBUG] Successfully parsed \(fieldName) with ISO8601")
-                    return date
-                }
-            }
-
             // DateFormatterでもう一度試す（PostgreSQLのタイムスタンプフォーマット対応）
             let dateFormatter = DateFormatter()
             dateFormatter.locale = Locale(identifier: "en_US_POSIX")
@@ -555,14 +549,6 @@ struct PostResponse: Decodable {
                 "yyyy-MM-dd HH:mm:ssZ",
                 "yyyy-MM-dd HH:mm:ss"
             ]
-
-            for format in formats {
-                dateFormatter.dateFormat = format
-                if let date = dateFormatter.date(from: dateString) {
-                    print("✅ [DEBUG] Successfully parsed \(fieldName) with format: \(format)")
-                    return date
-                }
-            }
 
             return Date()
         }
@@ -802,13 +788,6 @@ struct NearbyPostResponse: Decodable {
                 }()
             ]
 
-            for formatter in formatters {
-                if let date = formatter.date(from: dateString) {
-                    print("✅ [DEBUG] Successfully parsed \(fieldName) with ISO8601")
-                    return date
-                }
-            }
-
             // DateFormatterでもう一度試す（PostgreSQLのタイムスタンプフォーマット対応）
             let dateFormatter = DateFormatter()
             dateFormatter.locale = Locale(identifier: "en_US_POSIX")
@@ -824,16 +803,6 @@ struct NearbyPostResponse: Decodable {
                 "yyyy-MM-dd HH:mm:ssZ",
                 "yyyy-MM-dd HH:mm:ss"
             ]
-
-            for format in formats {
-                dateFormatter.dateFormat = format
-                if let date = dateFormatter.date(from: dateString) {
-                    print("✅ [DEBUG] Successfully parsed \(fieldName) with format: \(format)")
-                    return date
-                }
-            }
-
-            print("⚠️ [WARNING] Failed to parse \(fieldName): '\(dateString)' - using current date as fallback")
             return Date()
         }
 

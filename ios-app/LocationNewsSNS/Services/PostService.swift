@@ -199,9 +199,9 @@ class PostService: ObservableObject, PostServiceProtocol {
     /// 投稿を取得
     func getPost(id: UUID) async -> Post? {
         do {
-            return try await postRepository.getPost(id: id)
+            let post = try await postRepository.getPost(id: id)
+            return post
         } catch {
-            print("投稿取得エラー: \(error)")
             await MainActor.run {
                 self.errorMessage = "投稿の取得に失敗しました: \(error.localizedDescription)"
             }
@@ -248,7 +248,7 @@ class PostService: ObservableObject, PostServiceProtocol {
                 }
             }
         } catch {
-            print("⚠️ [WARNING] PostService.refreshPost - 投稿の再取得に失敗: \(error)")
+            // エラーは無視（UI更新は行わない）
         }
     }
 

@@ -395,7 +395,6 @@ struct UserResponse: Codable {
                 }
             }
 
-            print("⚠️ [WARNING] Failed to parse \(fieldName): '\(dateString)' - using current date as fallback")
             return Date()
         }
 

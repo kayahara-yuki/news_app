@@ -16,7 +16,6 @@ struct ContentView: View {
     )
     @State private var showingPostCreation = false
     @State private var selectedPost: Post?
-    @State private var showingPostDetail = false
     @State private var selectedPinPost: Post? // ピン選択時の吹き出し表示用
     @State private var selectedCardPost: Post? // カード選択状態
     @EnvironmentObject private var viewModel: NearbyPostsViewModel
@@ -55,8 +54,83 @@ struct ContentView: View {
     var body: some View {
         TabView {
             // メイン地図画面
+            mapTabView
+                .tabItem {
+                    Label("地図", systemImage: "map")
+                }
+
+            // フィード画面
             NavigationView {
-                ZStack {
+                PostFeedView()
+            }
+            .navigationViewStyle(.stack)
+            .tabItem {
+                Label("フィード", systemImage: "list.bullet")
+            }
+
+            // 緊急情報画面
+            NavigationView {
+                EmergencyView()
+            }
+            .navigationViewStyle(.stack)
+            .tabItem {
+                Label("緊急", systemImage: "exclamationmark.triangle")
+            }
+
+            // プロフィール画面
+            NavigationView {
+                ProfileView()
+            }
+            .navigationViewStyle(.stack)
+            .tabItem {
+                Label("プロフィール", systemImage: "person.circle")
+            }
+        }
+        .tabViewStyle(.automatic)
+        .preferredColorScheme(.light)
+        .onAppear {
+            // アプリ起動時に位置情報の許可をリクエスト
+            locationService.requestPermission()
+
+            // 位置情報が許可されていて現在地が取得できている場合、地図の初期位置を現在地に設定
+            if locationService.authorizationStatus == .authorizedWhenInUse ||
+               locationService.authorizationStatus == .authorizedAlways,
+               let currentLocation = locationService.currentLocation {
+                region = MKCoordinateRegion(
+                    center: currentLocation.coordinate,
+                    span: defaultMapSpan
+                )
+            }
+        }
+        .onChange(of: locationService.currentLocation) { newLocation in
+            // 位置情報が更新されたときに、初回のみ地図の中心を現在地に移動
+            // lastFetchedCoordinateがnilの場合は初回とみなす
+            if lastFetchedCoordinate == nil,
+               let location = newLocation {
+                region = MKCoordinateRegion(
+                    center: location.coordinate,
+                    span: defaultMapSpan
+                )
+            }
+        }
+        .onChange(of: viewModel.posts.map { $0.id }) { newPostIds in
+            if let selectedPost = selectedPinPost {
+                let isStillInRange = newPostIds.contains(selectedPost.id)
+                if !isStillInRange {
+                    withAnimation(springAnimation) {
+                        selectedPinPost = nil
+                        selectedCardPost = nil
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Map Tab View
+
+    private var mapTabView: some View {
+        NavigationView {
+            ZStack {
                     // パフォーマンス最適化: 投稿IDで差分更新を最適化
                     Map(coordinateRegion: $region, showsUserLocation: true, annotationItems: viewModel.posts) { post in
                         MapAnnotation(coordinate: CLLocationCoordinate2D(
@@ -69,7 +143,6 @@ struct ContentView: View {
                                 selectedCardPost: $selectedCardPost,
                                 region: $region,
                                 selectedPost: $selectedPost,
-                                showingPostDetail: $showingPostDetail,
                                 springAnimation: springAnimation
                             )
                             .zIndex(selectedPinPost?.id == post.id ? 1000 : 0)
@@ -251,84 +324,11 @@ struct ContentView: View {
                 .sheet(isPresented: $showingPostCreation) {
                     PostCreationView()
                 }
-                .sheet(isPresented: $showingPostDetail) {
-                    if let post = selectedPost {
-                        PostDetailSheet(post: post)
-                    } else {
-                        Text("エラー: 投稿が見つかりません")
-                    }
+                .sheet(item: $selectedPost) { post in
+                    PostDetailSheet(post: post)
                 }
             }
             .navigationViewStyle(.stack)
-            .tabItem {
-                Label("地図", systemImage: "map")
-            }
-
-            // フィード画面
-            NavigationView {
-                PostFeedView()
-            }
-            .navigationViewStyle(.stack)
-            .tabItem {
-                Label("フィード", systemImage: "list.bullet")
-            }
-
-            // 緊急情報画面
-            NavigationView {
-                EmergencyView()
-            }
-            .navigationViewStyle(.stack)
-            .tabItem {
-                Label("緊急", systemImage: "exclamationmark.triangle")
-            }
-
-            // プロフィール画面
-            NavigationView {
-                ProfileView()
-            }
-            .navigationViewStyle(.stack)
-            .tabItem {
-                Label("プロフィール", systemImage: "person.circle")
-            }
-        }
-        .tabViewStyle(.automatic)
-        .preferredColorScheme(.light)
-        .onAppear {
-            // アプリ起動時に位置情報の許可をリクエスト
-            locationService.requestPermission()
-
-            // 位置情報が許可されていて現在地が取得できている場合、地図の初期位置を現在地に設定
-            if locationService.authorizationStatus == .authorizedWhenInUse ||
-               locationService.authorizationStatus == .authorizedAlways,
-               let currentLocation = locationService.currentLocation {
-                region = MKCoordinateRegion(
-                    center: currentLocation.coordinate,
-                    span: defaultMapSpan
-                )
-            }
-        }
-        .onChange(of: locationService.currentLocation) { newLocation in
-            // 位置情報が更新されたときに、初回のみ地図の中心を現在地に移動
-            // lastFetchedCoordinateがnilの場合は初回とみなす
-            if lastFetchedCoordinate == nil,
-               let location = newLocation {
-                region = MKCoordinateRegion(
-                    center: location.coordinate,
-                    span: defaultMapSpan
-                )
-            }
-        }
-        .onChange(of: viewModel.posts.map { $0.id }) { newPostIds in
-            if let selectedPost = selectedPinPost {
-                let isStillInRange = newPostIds.contains(selectedPost.id)
-                if !isStillInRange {
-                    withAnimation(springAnimation) {
-                        selectedPinPost = nil
-                        selectedCardPost = nil
-                    }
-                }
-            }
-        }
     }
 
     // MARK: - Map Region Changed
@@ -448,7 +448,6 @@ struct PostListBottomSheet: View {
 struct PostFeedView: View {
     @EnvironmentObject private var viewModel: NearbyPostsViewModel
     @State private var selectedPost: Post?
-    @State private var showingPostDetail = false
 
     var body: some View {
         ScrollView {
@@ -464,7 +463,6 @@ struct PostFeedView: View {
                             post: post,
                             onTap: {
                                 selectedPost = post
-                                showingPostDetail = true
                             },
                             onLocationTap: {
                                 // TODO: 地図タブに移動して該当位置を表示
@@ -483,11 +481,9 @@ struct PostFeedView: View {
         .refreshable {
             await viewModel.refreshPosts()
         }
-        .sheet(isPresented: $showingPostDetail) {
-            if let post = selectedPost {
-                // TODO: PostDetailViewを実装
-                Text("投稿詳細: \(post.content)")
-            }
+        .sheet(item: $selectedPost) { post in
+            // TODO: PostDetailViewを実装
+            Text("投稿詳細: \(post.content)")
         }
         .onAppear {
             if viewModel.posts.isEmpty {
@@ -885,7 +881,6 @@ struct PostMapAnnotationContent: View {
     @Binding var selectedCardPost: Post?
     @Binding var region: MKCoordinateRegion
     @Binding var selectedPost: Post?
-    @Binding var showingPostDetail: Bool
     let springAnimation: Animation
 
     var body: some View {
@@ -894,7 +889,6 @@ struct PostMapAnnotationContent: View {
             if selectedPinPost?.id == post.id {
                 MapPinCalloutView(post: post) {
                     selectedPost = post
-                    showingPostDetail = true
                 }
                 .transition(.scale.combined(with: .opacity))
                 .padding(.bottom, 20) // 三角形とピンの間に十分な余白を追加

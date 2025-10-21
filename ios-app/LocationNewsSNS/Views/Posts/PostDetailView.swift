@@ -360,8 +360,6 @@ struct PostDetailSheet: View {
                     likeCount = updatedPost.likeCount
                     commentCount = updatedPost.commentCount
                 }
-            } else {
-                print("⚠️ [WARNING] PostDetailView.refreshPostData - 投稿の取得に失敗")
             }
         }
     }

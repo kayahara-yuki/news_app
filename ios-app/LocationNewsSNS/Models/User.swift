@@ -137,7 +137,6 @@ struct UserProfile: Codable, Identifiable {
                 return date
             }
 
-            print("⚠️ [WARNING] Failed to parse date string: \(dateString)")
         }
 
         // Doubleとしてデコードを試みる（タイムスタンプ）
