@@ -47,7 +47,6 @@ class PushNotificationService: NSObject, ObservableObject {
             }
             
         } catch {
-            print("通知許可要求エラー: \(error)")
         }
     }
     
@@ -90,15 +89,13 @@ class PushNotificationService: NSObject, ObservableObject {
     
     /// デバイストークン登録失敗
     func handleRegistrationError(_ error: Error) {
-        print("デバイストークン登録エラー: \(error)")
     }
     
     private func uploadDeviceToken(_ token: Data) async {
         let tokenString = token.map { String(format: "%02.2hhx", $0) }.joined()
-        
+
         // TODO: Supabaseにデバイストークンを送信
-        print("デバイストークンをサーバーに送信: \(tokenString)")
-        
+
         // 実際の実装ではSupabaseのユーザープロフィールテーブルに保存
         /*
         do {
@@ -108,7 +105,6 @@ class PushNotificationService: NSObject, ObservableObject {
                 .eq("id", getCurrentUserID())
                 .execute()
         } catch {
-            print("デバイストークン送信エラー: \(error)")
         }
         */
     }
@@ -153,7 +149,6 @@ class PushNotificationService: NSObject, ObservableObject {
         
         notificationCenter.add(request) { error in
             if let error = error {
-                print("ローカル通知送信エラー: \(error)")
             }
         }
     }
@@ -185,7 +180,6 @@ class PushNotificationService: NSObject, ObservableObject {
         
         notificationCenter.add(request) { error in
             if let error = error {
-                print("緊急通知送信エラー: \(error)")
             }
         }
     }

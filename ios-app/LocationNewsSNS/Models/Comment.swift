@@ -8,7 +8,7 @@ struct Comment: Identifiable, Codable {
     let user: UserProfile
     let content: String
     let parentCommentID: UUID? // 返信の場合
-    let likeCount: Int
+    var likeCount: Int  // varに変更してローカル更新を可能に
     let createdAt: Date
     let updatedAt: Date
 

@@ -388,7 +388,6 @@ struct ShelterResponse: Codable {
             do {
                 shelterFacilities = try JSONDecoder().decode(ShelterFacilities.self, from: data)
             } catch {
-                print("設備情報のデコードに失敗: \(error)")
             }
         }
         

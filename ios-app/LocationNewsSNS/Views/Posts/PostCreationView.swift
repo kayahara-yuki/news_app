@@ -661,7 +661,6 @@ struct PostCreationView: View {
                 await MainActor.run {
                     isUploading = false
                 }
-                print("投稿作成エラー: \(error)")
             }
         }
     }
@@ -712,7 +711,6 @@ struct PostCreationView: View {
                 await MainActor.run {
                     self.isLoadingMetadata = false
                 }
-                print("メタデータ取得エラー: \(error)")
             }
         }
     }

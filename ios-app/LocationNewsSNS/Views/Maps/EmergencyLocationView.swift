@@ -306,7 +306,6 @@ class EmergencyLocationViewModel: ObservableObject {
     
     private func shareLocationWithTrustedContacts(message: String) async {
         // TODO: 信頼できる連絡先に位置情報を送信
-        print("Sharing location with trusted contacts: \(message)")
     }
     
     private func shareLocationWithEmergencyServices(
@@ -314,7 +313,6 @@ class EmergencyLocationViewModel: ObservableObject {
         eventType: EmergencyEventType
     ) async {
         // TODO: 緊急サービスに位置情報を送信
-        print("Sharing location with emergency services: \(eventType.rawValue) - \(message)")
     }
 }
 

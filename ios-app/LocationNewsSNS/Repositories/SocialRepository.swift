@@ -19,6 +19,7 @@ protocol SocialRepositoryProtocol {
     func likeComment(commentID: UUID) async throws
     func unlikeComment(commentID: UUID) async throws
     func deleteComment(commentID: UUID) async throws
+    func checkCommentLikeStatus(commentID: UUID) async throws -> Bool
     
     // いいね関連
     func likePost(postID: UUID) async throws
@@ -259,7 +260,9 @@ class SocialRepository: SocialRepositoryProtocol {
         // ISO8601形式の日付をデコードするためにJSONDecoderを設定
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode([Comment].self, from: response.data)
+        let replies = try decoder.decode([Comment].self, from: response.data)
+
+        return replies
     }
     
     func likeComment(commentID: UUID) async throws {
@@ -293,7 +296,7 @@ class SocialRepository: SocialRepositoryProtocol {
         // コメントのいいね数を更新
         await updateCommentLikesCount(commentID: commentID, increment: true)
     }
-    
+
     func unlikeComment(commentID: UUID) async throws {
         let currentUserID = try await getCurrentUserID()
 
@@ -325,6 +328,20 @@ class SocialRepository: SocialRepositoryProtocol {
             .delete()
             .eq("comment_id", value: commentID.uuidString)
             .execute()
+    }
+
+    func checkCommentLikeStatus(commentID: UUID) async throws -> Bool {
+        let currentUserID = try await getCurrentUserID()
+
+        let response = try await supabase
+            .from("likes")
+            .select("id", head: false, count: .exact)
+            .eq("user_id", value: currentUserID.uuidString)
+            .eq("comment_id", value: commentID.uuidString)
+            .limit(1)
+            .execute()
+
+        return (response.count ?? 0) > 0
     }
     
     // MARK: - いいね関連

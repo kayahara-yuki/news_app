@@ -63,7 +63,6 @@ class RealtimeService: ObservableObject {
             try await channel.subscribeWithError()
             handleSubscriptionSuccess(channelName: channelName)
         } catch {
-            print("Subscription error: \(error)")
             handleSubscriptionError(channelName: channelName, error: error)
         }
 
@@ -118,13 +117,11 @@ class RealtimeService: ObservableObject {
     */
 
     private func handleSubscriptionSuccess(channelName: String) {
-        print("Realtime channel \(channelName) subscribed successfully")
         connectionStatus = .connected
         isConnected = true
     }
 
     private func handleSubscriptionError(channelName: String, error: Error) {
-        print("Realtime channel \(channelName) subscription error: \(error)")
         connectionStatus = .error
         isConnected = false
         activeSubscriptions.removeValue(forKey: channelName)
@@ -136,8 +133,6 @@ class RealtimeService: ObservableObject {
     private func attemptReconnection(channelName: String) {
         Task {
             try? await Task.sleep(nanoseconds: UInt64(reconnectDelay * 1_000_000_000))
-
-            print("Attempting to reconnect channel: \(channelName)")
 
             // チャンネルを再作成して再購読
             let _ = await subscribeToChannel(channelName)

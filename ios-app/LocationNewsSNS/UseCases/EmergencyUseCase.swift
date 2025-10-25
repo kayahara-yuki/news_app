@@ -221,13 +221,11 @@ class EmergencyUseCase: EmergencyUseCaseProtocol {
     
     private func sendEmergencyNotification(for post: Post) async throws {
         // 近隣ユーザーへの緊急通知
-        print("緊急投稿の通知送信: \(post.id)")
         // TODO: 実際の通知実装
     }
-    
+
     private func sendEmergencyEventNotification(for event: EmergencyEvent) async throws {
         // 緊急事態の通知送信
-        print("緊急事態の通知送信: \(event.id)")
         // TODO: 実際の通知実装
     }
 }

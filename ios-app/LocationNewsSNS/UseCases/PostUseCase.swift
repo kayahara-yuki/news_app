@@ -166,7 +166,6 @@ class PostUseCase: PostUseCaseProtocol {
         // - 近隣ユーザーへの通知
         // - 管理者への通知
         // - 信頼性スコアの確認
-        print("緊急投稿の処理: \(post.id)")
     }
 }
 

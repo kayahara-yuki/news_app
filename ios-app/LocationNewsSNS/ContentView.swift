@@ -18,8 +18,10 @@ struct ContentView: View {
     @State private var selectedPost: Post?
     @State private var selectedPinPost: Post? // ピン選択時の吹き出し表示用
     @State private var selectedCardPost: Post? // カード選択状態
+    @State private var selectedNews: NewsStory? // ニュース選択状態
     @EnvironmentObject private var viewModel: NearbyPostsViewModel
     @EnvironmentObject private var locationService: LocationService
+    @StateObject private var newsService = NewsService()
 
     // マップスクロール監視用
     @State private var lastFetchedCoordinate: CLLocationCoordinate2D?
@@ -88,6 +90,7 @@ struct ContentView: View {
         }
         .tabViewStyle(.automatic)
         .preferredColorScheme(.light)
+        .safariSheet() // アプリ全体にSafariシート機能を適用
         .onAppear {
             // アプリ起動時に位置情報の許可をリクエスト
             locationService.requestPermission()
@@ -100,6 +103,11 @@ struct ContentView: View {
                     center: currentLocation.coordinate,
                     span: defaultMapSpan
                 )
+
+                // ニュースを取得
+                Task {
+                    await newsService.fetchNearbyNews(userLocation: currentLocation.coordinate)
+                }
             }
         }
         .onChange(of: locationService.currentLocation) { newLocation in
@@ -316,9 +324,13 @@ struct ContentView: View {
                     VStack {
                         Spacer()
 
-                        // Liquid Glass エフェクトのボトムシート
-                        PostListBottomSheet(viewModel: viewModel, region: $region, selectedPinPost: $selectedPinPost, selectedCardPost: $selectedCardPost)
-                            .padding(.bottom, 16)
+                        // ニュースカルーセル（投稿カルーセルから切り替え）
+                        NewsCarouselBottomSheet(
+                            newsService: newsService,
+                            region: $region,
+                            selectedNews: $selectedNews
+                        )
+                        .padding(.bottom, 16)
                     }
                 }
                 .sheet(isPresented: $showingPostCreation) {
@@ -375,6 +387,58 @@ struct ContentView: View {
 
             lastFetchedCoordinate = newCoordinate
         }
+    }
+}
+
+// MARK: - News Carousel Bottom Sheet
+
+struct NewsCarouselBottomSheet: View {
+    @ObservedObject var newsService: NewsService
+    @Binding var region: MKCoordinateRegion
+    @Binding var selectedNews: NewsStory?
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if !newsService.nearbyNews.isEmpty {
+                NearbyNewsCarouselView(
+                    news: $newsService.nearbyNews,
+                    selectedNews: $selectedNews,
+                    newsService: newsService,
+                    onNewsTapped: { news in
+                        // ニュースタップ時の処理
+                        selectedNews = news
+
+                        // ニュース記事URLをアプリ内ブラウザで開く
+                        if let url = URL(string: news.link) {
+                            openURL(url)
+                        }
+                    },
+                    onLocationTapped: { coordinate in
+                        // 地図を移動
+                        withAnimation {
+                            region = MKCoordinateRegion(
+                                center: coordinate,
+                                span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+                            )
+                        }
+                    }
+                )
+            } else if newsService.isLoading {
+                ProgressView("ニュース取得中...")
+                    .padding()
+            } else {
+                // 空の状態はNearbyNewsCarouselView内で表示
+                NearbyNewsCarouselView(
+                    news: $newsService.nearbyNews,
+                    selectedNews: $selectedNews,
+                    newsService: newsService,
+                    onNewsTapped: nil,
+                    onLocationTapped: nil
+                )
+            }
+        }
+        .background(Color.clear)
     }
 }
 

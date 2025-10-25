@@ -25,18 +25,16 @@ class LocationPrivacyService: ObservableObject {
             let data = try JSONEncoder().encode(privacySettings)
             userDefaults.set(data, forKey: privacyKey)
         } catch {
-            print("プライバシー設定の保存エラー: \(error)")
         }
     }
     
     /// プライバシー設定を読み込み
     private func loadPrivacySettings() -> PrivacySettings? {
         guard let data = userDefaults.data(forKey: privacyKey) else { return nil }
-        
+
         do {
             return try JSONDecoder().decode(PrivacySettings.self, from: data)
         } catch {
-            print("プライバシー設定の読み込みエラー: \(error)")
             return nil
         }
     }
@@ -154,23 +152,19 @@ class LocationPrivacyService: ObservableObject {
     /// 緊急モードを有効化
     func activateEmergencyMode() {
         isEmergencyMode = true
-        
+
         // 緊急モード時は一時的に位置情報の精度を最高に設定
         if privacySettings.emergencyOverride {
             updateLocationPrecision(.exact)
         }
-        
-        print("緊急モードが有効化されました")
     }
     
     /// 緊急モードを無効化
     func deactivateEmergencyMode() {
         isEmergencyMode = false
-        
+
         // 通常のプライバシー設定に戻す
         // Note: ユーザーの元の設定を復元する実装が必要
-        
-        print("緊急モードが無効化されました")
     }
     
     // MARK: - データ保持管理
@@ -182,13 +176,11 @@ class LocationPrivacyService: ObservableObject {
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
 
         // 実際の実装では、データベースから古いレコードを削除
-        print("位置データのクリーンアップ: \(cutoffDate)以前のデータを削除")
     }
 
     /// 位置履歴を削除
     func deleteLocationHistory() async {
         // 実際の実装では、すべての位置履歴を削除
-        print("位置履歴を削除しました")
     }
     
     // MARK: - プライバシー分析

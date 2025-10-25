@@ -50,10 +50,8 @@ class MediaUploadService: ObservableObject {
                         allowedMimeTypes: allowedImageTypes + allowedVideoTypes
                     )
                 )
-                print("メディアバケットを作成しました: \(bucketName)")
             }
         } catch {
-            print("バケット作成エラー: \(error)")
         }
     }
     
@@ -343,11 +341,9 @@ class MediaUploadService: ObservableObject {
             if !oldFiles.isEmpty {
                 let pathsToDelete = oldFiles.map { "\(userPath)/\($0.name)" }
                 try await storage.from(bucketName).remove(paths: pathsToDelete)
-                print("削除した古いファイル数: \(oldFiles.count)")
             }
-            
+
         } catch {
-            print("ファイルクリーンアップエラー: \(error)")
         }
     }
     

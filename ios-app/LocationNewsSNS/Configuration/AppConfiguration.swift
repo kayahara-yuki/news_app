@@ -102,13 +102,11 @@ class AppConfiguration: ObservableObject {
     func enableTestMode() {
         useTestData = true
         showPerformanceMetrics = true
-        print("テストモードが有効化されました")
     }
-    
+
     func disableTestMode() {
         useTestData = false
         showPerformanceMetrics = false
-        print("テストモードが無効化されました")
     }
     #endif
 }

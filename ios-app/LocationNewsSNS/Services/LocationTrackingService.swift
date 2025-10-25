@@ -126,7 +126,6 @@ class LocationTrackingService: ObservableObject {
     private func configureLocationUpdates(for mode: TrackingMode) {
         // TODO: LocationServiceProtocol に locationManager プロパティを追加する必要がある
         guard let concreteLocationService = locationService as? LocationService else {
-            print("Warning: Cannot configure location updates - locationService is not a concrete LocationService")
             return
         }
 
@@ -207,12 +206,10 @@ class LocationTrackingService: ObservableObject {
     
     private func saveTrackingDataToStorage(_ data: TrackingData) async {
         // TODO: Core Dataへの保存実装
-        print("Saving tracking data: \(data.id)")
     }
-    
+
     private func saveTempTrackingData(_ data: TrackingData) async {
         // TODO: 一時データの保存実装
-        print("Saving temp tracking data: \(data.id)")
     }
     
     // MARK: - Emergency Features
@@ -231,7 +228,6 @@ class LocationTrackingService: ObservableObject {
     
     private func startRealtimeLocationSharing() {
         // TODO: リアルタイム位置共有の実装
-        print("Starting realtime location sharing for emergency")
     }
     
     // MARK: - Path Analysis

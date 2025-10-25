@@ -145,7 +145,6 @@ struct UserProfile: Codable, Identifiable {
         }
 
         // どちらも失敗した場合は現在時刻を返す（エラーを避けるため）
-        print("⚠️ [WARNING] Could not decode date for key: \(key), using current date")
         return Date()
     }
 }

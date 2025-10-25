@@ -181,7 +181,6 @@ class ImagePickerService: NSObject, ObservableObject {
                 let processedItem = try await processAsset(selectedItem.asset)
                 processedItems.append(processedItem)
             } catch {
-                print("メディア処理エラー: \(error)")
             }
         }
         
@@ -316,7 +315,6 @@ class ImagePickerService: NSObject, ObservableObject {
                     self?.loadRecentPhotos(count: 1)
                 }
             } else if let error = error {
-                print("動画保存エラー: \(error)")
             }
         }
     }

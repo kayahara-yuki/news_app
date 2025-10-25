@@ -170,12 +170,10 @@ class EmergencyService: ObservableObject, EmergencyServiceProtocol {
     
     func fetchNearbyEmergencies(location: CLLocationCoordinate2D) async {
         // 緊急事態取得の実装（後で追加）
-        print("緊急事態を取得中...")
     }
     
     func fetchNearbyShelters(location: CLLocationCoordinate2D) async {
         // 避難所取得の実装（後で追加）
-        print("避難所を取得中...")
     }
 }
 
@@ -185,12 +183,10 @@ class NotificationService: ObservableObject, NotificationServiceProtocol {
     
     func requestPermission() async {
         // プッシュ通知の許可要求実装
-        print("プッシュ通知の許可を要求")
     }
     
     func sendLocalNotification(title: String, body: String) {
         // ローカル通知の送信実装
-        print("ローカル通知: \(title) - \(body)")
     }
 }
 

@@ -73,7 +73,6 @@ class RealtimeLocationManager: ObservableObject {
 
         // プライバシー設定を確認
         guard locationPrivacyService.privacySettings.locationSharing else {
-            print("Location sharing is disabled in privacy settings")
             return
         }
 

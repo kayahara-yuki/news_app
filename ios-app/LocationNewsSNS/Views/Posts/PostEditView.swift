@@ -523,7 +523,6 @@ struct PostEditView: View {
                 await MainActor.run {
                     isUpdating = false
                 }
-                print("投稿更新エラー: \(error)")
             }
         }
     }

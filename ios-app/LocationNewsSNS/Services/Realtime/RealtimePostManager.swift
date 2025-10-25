@@ -219,7 +219,6 @@ class RealtimePostManager: ObservableObject {
 
             realtimePosts = posts
         } catch {
-            print("Failed to fetch initial posts: \(error)")
         }
     }
 
@@ -251,7 +250,6 @@ class RealtimePostManager: ObservableObject {
             }
 
         } catch {
-            print("Failed to fetch and merge new posts: \(error)")
         }
     }
     
@@ -274,7 +272,6 @@ class RealtimePostManager: ObservableObject {
             let post = try JSONDecoder().decode(Post.self, from: data)
             return post
         } catch {
-            print("Failed to decode post: \(error)")
             return nil
         }
     }

@@ -425,7 +425,6 @@ class EmergencyNotificationService: ObservableObject {
             let data = try JSONSerialization.data(withJSONObject: record)
             return try JSONDecoder().decode(EmergencyEvent.self, from: data)
         } catch {
-            print("Failed to decode emergency event: \(error)")
             return nil
         }
     }

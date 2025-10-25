@@ -135,7 +135,6 @@ class PostService: ObservableObject, PostServiceProtocol {
             }
 
         } catch {
-            print("投稿作成エラー: \(error)")
             await MainActor.run {
                 self.errorMessage = "投稿の作成に失敗しました: \(error.localizedDescription)"
             }
@@ -157,7 +156,6 @@ class PostService: ObservableObject, PostServiceProtocol {
             await refreshPost(id: id)
 
         } catch {
-            print("いいねエラー: \(error)")
             await MainActor.run {
                 self.errorMessage = "いいねに失敗しました: \(error.localizedDescription)"
             }
@@ -179,7 +177,6 @@ class PostService: ObservableObject, PostServiceProtocol {
             await refreshPost(id: id)
 
         } catch {
-            print("いいね取り消しエラー: \(error)")
             await MainActor.run {
                 self.errorMessage = "いいねの取り消しに失敗しました: \(error.localizedDescription)"
             }
@@ -191,7 +188,6 @@ class PostService: ObservableObject, PostServiceProtocol {
         do {
             return try await postRepository.hasUserLikedPost(id: postID, userID: userID)
         } catch {
-            print("いいね状態チェックエラー: \(error)")
             return false
         }
     }
@@ -222,7 +218,6 @@ class PostService: ObservableObject, PostServiceProtocol {
             }
             
         } catch {
-            print("投稿削除エラー: \(error)")
             await MainActor.run {
                 self.errorMessage = "投稿の削除に失敗しました: \(error.localizedDescription)"
             }

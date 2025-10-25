@@ -20,7 +20,6 @@ class LocalStorageManager: ObservableObject {
         let container = NSPersistentContainer(name: "LocationNewsSNS")
         container.loadPersistentStores { _, error in
             if let error = error {
-                print("Core Data error: \(error)")
             }
         }
         container.viewContext.automaticallyMergesChangesFromParent = true
@@ -65,12 +64,10 @@ class LocalStorageManager: ObservableObject {
     
     private func handleNetworkStatusChange() {
         if isOnline {
-            print("ネットワーク接続が復旧しました")
             Task {
                 await syncPendingData()
             }
         } else {
-            print("ネットワーク接続が切断されました")
             syncStatus = .offline
         }
     }
@@ -98,11 +95,9 @@ class LocalStorageManager: ObservableObject {
             await syncPendingActions()
             
             syncStatus = .synced
-            print("データ同期が完了しました")
-            
+
         } catch {
             syncStatus = .failed
-            print("データ同期に失敗しました: \(error)")
         }
     }
     
@@ -118,7 +113,6 @@ class LocalStorageManager: ObservableObject {
                 context.delete(pendingPost)
                 
             } catch {
-                print("投稿の同期に失敗: \(error)")
                 // エラーの場合はそのまま残す
             }
         }
@@ -134,7 +128,6 @@ class LocalStorageManager: ObservableObject {
                 try await executePendingAction(action)
                 context.delete(action)
             } catch {
-                print("アクションの同期に失敗: \(error)")
             }
         }
         
@@ -174,7 +167,6 @@ class LocalStorageManager: ObservableObject {
             let cachedPosts = try context.fetch(request)
             return cachedPosts.compactMap { $0.toPost() }
         } catch {
-            print("キャッシュされた投稿の取得に失敗: \(error)")
             return []
         }
     }
@@ -207,7 +199,6 @@ class LocalStorageManager: ObservableObject {
         do {
             return try context.fetch(request)
         } catch {
-            print("未同期投稿の取得に失敗: \(error)")
             return []
         }
     }
@@ -219,7 +210,6 @@ class LocalStorageManager: ObservableObject {
         do {
             return try context.fetch(request)
         } catch {
-            print("未同期アクションの取得に失敗: \(error)")
             return []
         }
     }

@@ -15,6 +15,8 @@ struct PostDetailSheet: View {
     @State private var commentCount: Int
     @State private var showUserProfile = false
     @State private var showComments = true
+    @State private var showDeleteAlert = false
+    @State private var showActionSheet = false
 
     init(post: Post) {
         self.post = post
@@ -65,14 +67,36 @@ struct PostDetailSheet: View {
             .navigationTitle("投稿")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("閉じる") {
                         dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    // 3点リーダーメニュー（自分の投稿の場合のみ）
+                    if post.user.id == authService.currentUser?.id {
+                        Menu {
+                            Button(role: .destructive, action: { showDeleteAlert = true }) {
+                                Label("投稿を削除", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundColor(.primary)
+                        }
                     }
                 }
             }
             .sheet(isPresented: $showUserProfile) {
                 UserProfileDetailView(user: post.user)
+            }
+            .alert("投稿を削除しますか？", isPresented: $showDeleteAlert) {
+                Button("削除", role: .destructive) {
+                    deletePost()
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("この操作は取り消せません。")
             }
             .onAppear {
                 loadComments()
@@ -361,6 +385,14 @@ struct PostDetailSheet: View {
                     commentCount = updatedPost.commentCount
                 }
             }
+        }
+    }
+
+    private func deletePost() {
+        Task {
+            await postService.deletePost(id: post.id)
+            // 削除が成功したら画面を閉じる
+            dismiss()
         }
     }
 }

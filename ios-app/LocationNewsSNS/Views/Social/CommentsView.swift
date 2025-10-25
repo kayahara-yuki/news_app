@@ -237,7 +237,7 @@ struct CommentsView: View {
         replyingTo = comment
         isCommentFieldFocused = true
     }
-    
+
     private func likeComment(_ comment: Comment) {
         Task {
             if comment.isLikedByCurrentUser {
@@ -247,7 +247,7 @@ struct CommentsView: View {
             }
         }
     }
-    
+
     private func deleteComment(_ comment: Comment) {
         Task {
             await commentService.deleteComment(comment.id, postID: post.id)
@@ -273,10 +273,10 @@ struct CommentRowView: View {
         VStack(alignment: .leading, spacing: 8) {
             // メインコメント
             commentContent
-            
+
             // アクションボタン
             commentActions
-            
+
             // 返信表示
             if showingReplies {
                 repliesSection
@@ -287,6 +287,18 @@ struct CommentRowView: View {
                 onDelete()
             }
             Button("キャンセル", role: .cancel) {}
+        }
+        .onAppear {
+            // コメントに返信がある場合は自動的に読み込む
+            if comment.repliesCount > 0 {
+                loadReplies()
+            }
+        }
+    }
+
+    private func loadReplies() {
+        Task {
+            await commentService.loadReplies(commentID: comment.id)
         }
     }
     
@@ -341,11 +353,12 @@ struct CommentRowView: View {
     
     @ViewBuilder
     private var commentActions: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 24) {
             // いいねボタン
             Button(action: onLike) {
                 HStack(spacing: 4) {
                     Image(systemName: comment.isLikedByCurrentUser ? "heart.fill" : "heart")
+                        .font(.system(size: 14))
                         .foregroundColor(comment.isLikedByCurrentUser ? .red : .gray)
 
                     if comment.likeCount > 0 {
@@ -354,41 +367,57 @@ struct CommentRowView: View {
                             .foregroundColor(.gray)
                     }
                 }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 8)
             }
-            
+            .buttonStyle(.plain)
+
             // 返信ボタン
-            Button(action: onReply) {
+            Button(action: {
+                onReply()
+                // 返信がある場合は表示/非表示をトグル
+                if comment.repliesCount > 0 {
+                    showingReplies.toggle()
+                    if showingReplies && commentService.replies[comment.id] == nil {
+                        loadReplies()
+                    }
+                }
+            }) {
                 HStack(spacing: 4) {
-                    Image(systemName: "arrowshape.turn.up.left")
+                    Image(systemName: "bubble.left")
+                        .font(.system(size: 14))
                         .foregroundColor(.gray)
-                    
-                    Text("返信")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+
+                    if comment.repliesCount > 0 {
+                        Text("\(comment.repliesCount)")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
                 }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 8)
             }
-            
-            // 返信数表示
-            if comment.repliesCount > 0 {
-                Button(action: { showingReplies.toggle() }) {
-                    Text("\(comment.repliesCount)件の返信を\(showingReplies ? "非表示" : "表示")")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
-            
+            .buttonStyle(.plain)
+
             Spacer()
-            
-            // 削除ボタン（自分のコメントのみ）
+
+            // 3点リーダーメニュー（自分のコメントのみ）
             if comment.user.id == authService.currentUser?.id {
-                Button(action: { showingDeleteAlert = true }) {
-                    Image(systemName: "trash")
-                        .foregroundColor(.red)
-                        .font(.caption)
+                Menu {
+                    Button(role: .destructive, action: { showingDeleteAlert = true }) {
+                        Label("コメントを削除", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 8)
                 }
             }
         }
         .padding(.leading, 52) // アバターの幅分インデント
+        .padding(.vertical, 4)
     }
     
     @ViewBuilder
@@ -396,14 +425,28 @@ struct CommentRowView: View {
         if let replies = commentService.replies[comment.id] {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(replies) { reply in
-                    ReplyRowView(
-                        reply: reply,
-                        onLike: { likeReply(reply) },
-                        onDelete: { deleteReply(reply) }
-                    )
+                    HStack(alignment: .top, spacing: 0) {
+                        // 左側の縦線とインデント表示
+                        VStack(spacing: 0) {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 2)
+                        }
+                        .frame(width: 20)
+                        .padding(.leading, 32)
+
+                        ReplyRowView(
+                            reply: reply,
+                            onLike: { likeReply(reply) },
+                            onDelete: { deleteReply(reply) }
+                        )
+                        .background(Color(.systemGray6).opacity(0.5))
+                        .cornerRadius(8)
+                        .padding(.leading, 8)
+                    }
                 }
             }
-            .padding(.leading, 52)
+            .padding(.leading, 0)
         } else if commentService.isLoadingReplies {
             HStack {
                 ProgressView()
@@ -439,12 +482,17 @@ struct ReplyRowView: View {
     let reply: Comment
     let onLike: () -> Void
     let onDelete: () -> Void
-    
+
     @EnvironmentObject var authService: AuthService
     @State private var showingDeleteAlert = false
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
+            // 返信アイコン
+            Image(systemName: "arrowshape.turn.up.left.fill")
+                .font(.system(size: 10))
+                .foregroundColor(.gray.opacity(0.5))
+                .padding(.top, 8)
             // 小さなアバター
             if let avatarURL = reply.user.avatarURL {
                 CachedAsyncImage(url: URL(string: avatarURL)) { image in
@@ -455,57 +503,75 @@ struct ReplyRowView: View {
                     Circle()
                         .fill(Color.gray.opacity(0.3))
                 }
-                .frame(width: 24, height: 24)
+                .frame(width: 32, height: 32)
                 .clipShape(Circle())
             } else {
                 Image(systemName: "person.circle.fill")
-                    .font(.system(size: 24))
+                    .font(.system(size: 32))
                     .foregroundColor(.gray)
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 // ユーザー名と時間
                 HStack {
                     Text(reply.user.displayName ?? reply.user.username)
                         .font(.caption)
-                        .fontWeight(.medium)
-                    
+                        .fontWeight(.semibold)
+
                     Text(reply.timeAgoString)
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.secondary)
-                    
+
                     Spacer()
-                    
-                    if reply.user.id == authService.currentUser?.id {
-                        Button(action: { showingDeleteAlert = true }) {
-                            Image(systemName: "trash")
-                                .foregroundColor(.red)
-                                .font(.caption2)
-                        }
-                    }
                 }
-                
+
                 // 返信内容
                 Text(reply.content)
-                    .font(.caption)
+                    .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
-                
-                // いいねボタン
-                Button(action: onLike) {
-                    HStack(spacing: 2) {
-                        Image(systemName: reply.isLikedByCurrentUser ? "heart.fill" : "heart")
-                            .foregroundColor(reply.isLikedByCurrentUser ? .red : .gray)
-                            .font(.caption2)
 
-                        if reply.likeCount > 0 {
-                            Text("\(reply.likeCount)")
-                                .font(.caption2)
+                // アクションボタン
+                HStack(spacing: 16) {
+                    // いいねボタン
+                    Button(action: onLike) {
+                        HStack(spacing: 4) {
+                            Image(systemName: reply.isLikedByCurrentUser ? "heart.fill" : "heart")
+                                .font(.system(size: 12))
+                                .foregroundColor(reply.isLikedByCurrentUser ? .red : .gray)
+
+                            if reply.likeCount > 0 {
+                                Text("\(reply.likeCount)")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 6)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    // 3点リーダーメニュー（自分の返信のみ）
+                    if reply.user.id == authService.currentUser?.id {
+                        Menu {
+                            Button(role: .destructive, action: { showingDeleteAlert = true }) {
+                                Label("返信を削除", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 12))
                                 .foregroundColor(.gray)
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 6)
                         }
                     }
                 }
+                .padding(.top, 2)
             }
         }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
         .alert("返信を削除しますか？", isPresented: $showingDeleteAlert) {
             Button("削除", role: .destructive) {
                 onDelete()

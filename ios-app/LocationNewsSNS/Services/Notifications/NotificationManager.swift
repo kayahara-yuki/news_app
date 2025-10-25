@@ -229,7 +229,6 @@ class NotificationManager: ObservableObject {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("定期通知スケジュールエラー: \(error)")
             }
         }
     }
@@ -264,7 +263,6 @@ class NotificationManager: ObservableObject {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("位置ベース通知スケジュールエラー: \(error)")
             }
         }
     }

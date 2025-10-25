@@ -221,7 +221,6 @@ struct MediaPickerView: View {
                     dismiss()
                 }
             } catch {
-                print("メディア処理エラー: \(error)")
                 await MainActor.run {
                     isProcessing = false
                 }
@@ -345,7 +344,6 @@ struct MediaThumbnailView: View {
                     self.thumbnailImage = thumbnail
                 }
             } catch {
-                print("サムネイル読み込みエラー: \(error)")
             }
         }
     }
@@ -425,7 +423,6 @@ struct AlbumThumbnailView: View {
                     self.thumbnailImage = thumbnail
                 }
             } catch {
-                print("アルバムサムネイル読み込みエラー: \(error)")
             }
         }
     }
@@ -482,7 +479,6 @@ struct SelectedMediaThumbnail: View {
                     self.thumbnailImage = thumbnail
                 }
             } catch {
-                print("選択済みメディアサムネイル読み込みエラー: \(error)")
             }
         }
     }

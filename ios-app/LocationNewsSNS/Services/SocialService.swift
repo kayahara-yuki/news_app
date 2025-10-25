@@ -64,7 +64,6 @@ class SocialService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("フォローエラー: \(error)")
             errorMessage = "フォローに失敗しました: \(error.localizedDescription)"
         }
     }
@@ -91,7 +90,6 @@ class SocialService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("フォロー解除エラー: \(error)")
             errorMessage = "フォロー解除に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -101,7 +99,6 @@ class SocialService: ObservableObject {
         do {
             return try await socialRepository.checkFollowStatus(userID: userID)
         } catch {
-            print("フォロー状態チェックエラー: \(error)")
             return false
         }
     }
@@ -117,7 +114,6 @@ class SocialService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("フォロワー取得エラー: \(error)")
             errorMessage = "フォロワーの取得に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -133,7 +129,6 @@ class SocialService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("フォロー中取得エラー: \(error)")
             errorMessage = "フォロー中の取得に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -146,7 +141,6 @@ class SocialService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("統計取得エラー: \(error)")
             errorMessage = "統計の取得に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -164,7 +158,6 @@ class SocialService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("活動フィード取得エラー: \(error)")
             errorMessage = "活動フィードの取得に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -180,7 +173,7 @@ class SocialService: ObservableObject {
             }
             
         } catch {
-            print("既読マークエラー: \(error)")
+            // エラーを無視
         }
     }
     
@@ -202,7 +195,6 @@ class SocialService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("ユーザー検索エラー: \(error)")
             errorMessage = "ユーザー検索に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -215,7 +207,6 @@ class SocialService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("おすすめユーザー取得エラー: \(error)")
             errorMessage = "おすすめユーザーの取得に失敗しました: \(error.localizedDescription)"
         }
     }

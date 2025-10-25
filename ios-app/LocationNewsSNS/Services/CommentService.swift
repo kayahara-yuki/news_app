@@ -97,7 +97,6 @@ class CommentService: ObservableObject {
             errorMessage = nil
             
         } catch {
-            print("コメント投稿エラー: \(error)")
             errorMessage = "コメントの投稿に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -112,11 +111,17 @@ class CommentService: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let postComments = try await socialRepository.getComments(
+            var postComments = try await socialRepository.getComments(
                 postID: postID,
                 limit: 20,
                 offset: comments[postID]?.count ?? 0
             )
+
+            // 各コメントのいいね状態を取得
+            for index in postComments.indices {
+                let isLiked = await checkCommentLikeStatus(commentID: postComments[index].id)
+                postComments[index].isLikedByCurrentUser = isLiked
+            }
 
             if comments[postID] == nil {
                 comments[postID] = postComments
@@ -132,8 +137,16 @@ class CommentService: ObservableObject {
             errorMessage = nil
 
         } catch {
-            print("コメント取得エラー: \(error)")
             errorMessage = "コメントの取得に失敗しました: \(error.localizedDescription)"
+        }
+    }
+
+    /// コメントのいいね状態をチェック
+    private func checkCommentLikeStatus(commentID: UUID) async -> Bool {
+        do {
+            return try await socialRepository.checkCommentLikeStatus(commentID: commentID)
+        } catch {
+            return false
         }
     }
     
@@ -143,7 +156,13 @@ class CommentService: ObservableObject {
         defer { isLoadingReplies = false }
 
         do {
-            let commentReplies = try await socialRepository.getReplies(commentID: commentID)
+            var commentReplies = try await socialRepository.getReplies(commentID: commentID)
+
+            // 各返信のいいね状態を取得
+            for index in commentReplies.indices {
+                let isLiked = await checkCommentLikeStatus(commentID: commentReplies[index].id)
+                commentReplies[index].isLikedByCurrentUser = isLiked
+            }
 
             // 既存の返信IDを取得して重複を除外
             if replies[commentID] == nil {
@@ -157,7 +176,6 @@ class CommentService: ObservableObject {
             errorMessage = nil
 
         } catch {
-            print("返信取得エラー: \(error)")
             errorMessage = "返信の取得に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -166,30 +184,28 @@ class CommentService: ObservableObject {
     func likeComment(_ commentID: UUID, postID: UUID) async {
         do {
             try await socialRepository.likeComment(commentID: commentID)
-            
+
             // ローカル状態を更新
             updateCommentLikeStatus(commentID: commentID, postID: postID, isLiked: true)
-            
+
             errorMessage = nil
-            
+
         } catch {
-            print("コメントいいねエラー: \(error)")
             errorMessage = "いいねに失敗しました: \(error.localizedDescription)"
         }
     }
-    
+
     /// コメントのいいねを取り消し
     func unlikeComment(_ commentID: UUID, postID: UUID) async {
         do {
             try await socialRepository.unlikeComment(commentID: commentID)
-            
+
             // ローカル状態を更新
             updateCommentLikeStatus(commentID: commentID, postID: postID, isLiked: false)
-            
+
             errorMessage = nil
-            
+
         } catch {
-            print("コメントいいね取り消しエラー: \(error)")
             errorMessage = "いいねの取り消しに失敗しました: \(error.localizedDescription)"
         }
     }
@@ -213,9 +229,8 @@ class CommentService: ObservableObject {
             )
             
             errorMessage = nil
-            
+
         } catch {
-            print("コメント削除エラー: \(error)")
             errorMessage = "コメントの削除に失敗しました: \(error.localizedDescription)"
         }
     }
@@ -226,15 +241,31 @@ class CommentService: ObservableObject {
         // 投稿のコメントを更新
         if let commentIndex = comments[postID]?.firstIndex(where: { $0.id == commentID }) {
             var updatedComment = comments[postID]![commentIndex]
-            // TODO: Comment構造体にisLikedByCurrentUserプロパティの更新ロジックを追加
+            updatedComment.isLikedByCurrentUser = isLiked
+
+            // いいね数も更新
+            if isLiked {
+                updatedComment.likeCount += 1
+            } else {
+                updatedComment.likeCount = max(0, updatedComment.likeCount - 1)
+            }
+
             comments[postID]![commentIndex] = updatedComment
         }
-        
+
         // 返信コメントも確認
         for (parentCommentID, replyList) in replies {
             if let replyIndex = replyList.firstIndex(where: { $0.id == commentID }) {
                 var updatedReply = replies[parentCommentID]![replyIndex]
-                // TODO: 同様の更新ロジック
+                updatedReply.isLikedByCurrentUser = isLiked
+
+                // いいね数も更新
+                if isLiked {
+                    updatedReply.likeCount += 1
+                } else {
+                    updatedReply.likeCount = max(0, updatedReply.likeCount - 1)
+                }
+
                 replies[parentCommentID]![replyIndex] = updatedReply
             }
         }

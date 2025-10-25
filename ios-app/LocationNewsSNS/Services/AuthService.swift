@@ -68,7 +68,6 @@ class AuthService: ObservableObject, AuthServiceProtocol {
             let session = try await supabase.auth.session
             await handleSignIn(session: session)
         } catch {
-            print("❌ [ERROR] AuthService - 既存セッションの確認エラー: \(error)")
             await handleSignOut()
         }
     }
@@ -97,12 +96,10 @@ class AuthService: ObservableObject, AuthServiceProtocol {
                 email: email,
                 password: password
             )
-            
+
             // 認証状態の変更は observeAuthStateChanges で自動処理される
-            print("サインイン成功: \(response.user.email ?? "")")
-            
+
         } catch {
-            print("サインインエラー: \(error)")
             errorMessage = "サインインに失敗しました: \(error.localizedDescription)"
         }
     }
@@ -125,11 +122,8 @@ class AuthService: ObservableObject, AuthServiceProtocol {
                 username: username,
                 displayName: displayName
             )
-            
-            print("サインアップ成功: \(email)")
-            
+
         } catch {
-            print("サインアップエラー: \(error)")
             errorMessage = "サインアップに失敗しました: \(error.localizedDescription)"
         }
     }
@@ -141,8 +135,7 @@ class AuthService: ObservableObject, AuthServiceProtocol {
         
         // Apple Sign-inの実装
         // Note: ASAuthorizationAppleIDCredentialを使用した実装が必要
-        
-        print("Apple Sign-in is not implemented yet")
+
         errorMessage = "Apple Sign-inは未実装です"
     }
     
@@ -153,9 +146,7 @@ class AuthService: ObservableObject, AuthServiceProtocol {
         
         do {
             try await supabase.auth.signOut()
-            print("サインアウト成功")
         } catch {
-            print("サインアウトエラー: \(error)")
             errorMessage = "サインアウトに失敗しました: \(error.localizedDescription)"
         }
     }
@@ -167,9 +158,7 @@ class AuthService: ObservableObject, AuthServiceProtocol {
         
         do {
             try await supabase.auth.resetPasswordForEmail(email)
-            print("パスワードリセットメール送信成功")
         } catch {
-            print("パスワードリセットエラー: \(error)")
             errorMessage = "パスワードリセットに失敗しました: \(error.localizedDescription)"
         }
     }
@@ -178,7 +167,6 @@ class AuthService: ObservableObject, AuthServiceProtocol {
     
     private func fetchUserProfile(userID: UUID) async {
         // ユーザープロフィール取得は後で実装
-        print("ユーザープロフィール取得: \(userID)")
         // 仮のユーザーデータ
         currentUser = UserProfile(
             id: userID,
@@ -198,7 +186,6 @@ class AuthService: ObservableObject, AuthServiceProtocol {
     
     private func createUserProfile(userID: UUID, email: String, username: String, displayName: String?) async {
         // プロフィール作成は後で実装
-        print("プロフィール作成: \(email)")
 
         let profile = UserProfile(
             id: userID,
@@ -226,7 +213,6 @@ class AuthService: ObservableObject, AuthServiceProtocol {
         defer { isLoading = false }
 
         // プロフィール更新は後で実装
-        print("プロフィール更新: \(displayName ?? "")")
 
         // TODO: Supabase APIで更新
 
