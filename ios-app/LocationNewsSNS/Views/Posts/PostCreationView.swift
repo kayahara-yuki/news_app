@@ -35,7 +35,22 @@ struct PostCreationView: View {
     @State private var showVisibilityPicker = false
     @State private var showEmergencyPicker = false
     @State private var showAttachmentsSheet = false
-    
+
+    // 音声録音関連（インライン統合）
+    @StateObject private var audioService = AudioService()
+    @State private var recordedAudioURL: URL?
+    @State private var isRecording = false
+    @State private var recordingTime: TimeInterval = 0
+    @State private var audioRecordingTimer: Timer?
+
+    // ステータス投稿関連
+    @State private var selectedStatus: StatusType?
+    @State private var showToast = false
+    @State private var toastMessage = ""
+
+    // パーミッション管理
+    @StateObject private var permissionHandler = PermissionHandler()
+
     private let maxContentLength = 1000
     private let maxTags = 10
 
@@ -47,13 +62,21 @@ struct PostCreationView: View {
             VStack(spacing: 0) {
                 // メイン投稿エリア
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 8) {
+                        // ステータスボタン（投稿作成画面上部）
+                        StatusButtonsView(
+                            selectedStatus: $selectedStatus,
+                            isEnabled: permissionHandler.isStatusPostEnabled,
+                            onStatusTapped: handleStatusTapped
+                        )
+                        .padding(.top, 4)
+
                         // 投稿テキスト入力
                         TextEditor(text: $postContent)
-                            .frame(minHeight: 200)
+                            .frame(minHeight: 80)
                             .scrollContentBackground(.hidden)
                             .padding(.horizontal)
-                            .padding(.top, 8)
+                            .padding(.top, 4)
                             .onChange(of: postContent) { newValue in
                                 if newValue.count > maxContentLength {
                                     postContent = String(newValue.prefix(maxContentLength))
@@ -62,22 +85,35 @@ struct PostCreationView: View {
                             .overlay(alignment: .topLeading) {
                                 if postContent.isEmpty {
                                     Text("今何が起こっていますか？")
+                                        .font(.caption)
                                         .foregroundColor(.secondary)
                                         .padding(.horizontal, 20)
-                                        .padding(.top, 16)
+                                        .padding(.top, 12)
                                         .allowsHitTesting(false)
                                 }
                             }
+
+                        // インライン音声録音UI
+                        if permissionHandler.shouldShowAudioRecorderButton {
+                            InlineAudioRecorderView(
+                                audioService: audioService,
+                                recordedAudioURL: $recordedAudioURL,
+                                isRecording: $isRecording,
+                                recordingTime: $recordingTime
+                            )
+                            .padding(.horizontal)
+                        }
 
                         // 添付ファイルインジケーター
                         if hasAnyAttachments {
                             CompactAttachmentIndicator(count: attachmentCount) {
                                 showAttachmentsSheet = true
                             }
-                            .padding(.top, 8)
                         }
 
-                        Spacer(minLength: 100)
+                        // 下部固定要素のための動的スペーサー
+                        Color.clear
+                            .frame(height: calculateBottomSpacing())
                     }
                 }
 
@@ -188,9 +224,16 @@ struct PostCreationView: View {
                     uploadingOverlay
                 }
             }
+            .overlay(alignment: .top) {
+                if showToast {
+                    toastView
+                }
+            }
+            .permissionAlerts(permissionHandler)
         }
         .task {
             setupInitialLocation()
+            updateLocationPermissionStatus()
         }
     }
     
@@ -198,14 +241,14 @@ struct PostCreationView: View {
 
     @ViewBuilder
     private var bottomToolbar: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 16) {
             // リンク追加
             Button(action: {
                 showURLInput.toggle()
             }) {
                 Image(systemName: (!urlInput.isEmpty || urlMetadata != nil) ? "link.circle.fill" : "link")
                     .foregroundColor((!urlInput.isEmpty || urlMetadata != nil) ? .green : .blue)
-                    .imageScale(.large)
+                    .imageScale(.medium)
             }
 
             // 位置情報
@@ -214,7 +257,7 @@ struct PostCreationView: View {
             }) {
                 Image(systemName: selectedLocation != nil ? "mappin.circle.fill" : "mappin.circle")
                     .foregroundColor(selectedLocation != nil ? .green : .blue)
-                    .imageScale(.large)
+                    .imageScale(.medium)
             }
             .accessibilityLabel("位置情報")
             .accessibilityHint(selectedLocation != nil ? "位置が設定されています。タップして変更できます" : "位置を設定")
@@ -225,7 +268,7 @@ struct PostCreationView: View {
             }) {
                 Image(systemName: tags.isEmpty ? "number" : "number.circle.fill")
                     .foregroundColor(tags.isEmpty ? .blue : .green)
-                    .imageScale(.large)
+                    .imageScale(.medium)
             }
 
             // 緊急度
@@ -234,7 +277,7 @@ struct PostCreationView: View {
             }) {
                 Image(systemName: emergencyLevel != nil ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
                     .foregroundColor(emergencyLevel != nil ? .orange : .blue)
-                    .imageScale(.large)
+                    .imageScale(.medium)
             }
 
             Spacer()
@@ -250,10 +293,11 @@ struct PostCreationView: View {
             } label: {
                 Image(systemName: visibility.iconName)
                     .foregroundColor(.blue)
-                    .imageScale(.large)
+                    .imageScale(.medium)
             }
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, 8)
         .sheet(isPresented: $showURLInput) {
             urlInputSheet
         }
@@ -557,25 +601,41 @@ struct PostCreationView: View {
         }
         .presentationDetents([.large])
     }
-    
-    
+
     // MARK: - Uploading Overlay
-    
+
     @ViewBuilder
     private var uploadingOverlay: some View {
         Color.black.opacity(0.3)
             .ignoresSafeArea()
-        
+
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.5)
-            
+
             Text(isDraftSaving ? "下書きを保存中..." : "投稿中...")
                 .font(.headline)
                 .foregroundColor(.white)
         }
         .padding(32)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    // MARK: - Toast View
+
+    @ViewBuilder
+    private var toastView: some View {
+        Text(toastMessage)
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color.green)
+            .cornerRadius(25)
+            .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+            .padding(.top, 60)
+            .transition(.move(edge: .top).combined(with: .opacity))
     }
     
     // MARK: - Computed Properties
@@ -587,12 +647,27 @@ struct PostCreationView: View {
         !isDraftSaving
     }
 
+    /// 下部固定要素のために必要なスペーシングを計算
+    /// ツールバー + Divider + 文字数カウンター・投稿ボタン領域 + セーフエリア + 余白
+    private func calculateBottomSpacing() -> CGFloat {
+        // 実測値ベースでの計算
+        let toolbarHeight: CGFloat = 50       // 下部ツールバーの実測高さ (アイコン + パディング16pt)
+        let dividerHeight: CGFloat = 1        // Dividerの高さ
+        let actionBarHeight: CGFloat = 80     // 文字数カウンター・投稿ボタン領域の実測高さ (パディング含む)
+        let safeAreaBottom: CGFloat = 34      // 標準的なボトムセーフエリア (ホームインジケーター)
+        let navigationBarHeight: CGFloat = 50 // ナビゲーションバーの影響
+        let extraPadding: CGFloat = 40        // 追加の余白（安全マージン）
+
+        return toolbarHeight + dividerHeight + actionBarHeight + safeAreaBottom + navigationBarHeight + extraPadding
+    }
+
     private var hasAnyAttachments: Bool {
         urlMetadata != nil ||
         !urlInput.isEmpty ||
         selectedLocation != nil ||
         !tags.isEmpty ||
-        emergencyLevel != nil
+        emergencyLevel != nil ||
+        recordedAudioURL != nil
     }
 
     private var attachmentCount: Int {
@@ -601,23 +676,35 @@ struct PostCreationView: View {
         if selectedLocation != nil { count += 1 }
         if !tags.isEmpty { count += 1 }
         if emergencyLevel != nil { count += 1 }
+        if recordedAudioURL != nil { count += 1 }
         return count
     }
     
     // MARK: - Methods
     
     private func setupInitialLocation() {
+        print("[PostCreationView] 📍 setupInitialLocation called")
         Task {
             if let currentLocation = locationService.currentLocation {
+                print("[PostCreationView] 📍 Current location available: lat=\(currentLocation.coordinate.latitude), lng=\(currentLocation.coordinate.longitude)")
                 selectedLocation = currentLocation.coordinate
                 do {
                     let address = try await locationService.reverseGeocode(location: currentLocation)
                     locationName = address.city + (address.ward ?? "") + (address.district ?? "")
+                    print("[PostCreationView] 📍 Address resolved: \(locationName)")
                 } catch {
                     locationName = "現在地"
+                    print("[PostCreationView] ⚠️ Failed to resolve address: \(error.localizedDescription)")
                 }
+            } else {
+                print("[PostCreationView] ❌ Current location NOT available")
             }
         }
+    }
+
+    /// 位置情報パーミッション状態を更新
+    private func updateLocationPermissionStatus() {
+        permissionHandler.updateLocationAuthorizationStatus(locationService.authorizationStatus)
     }
     
     
@@ -630,36 +717,87 @@ struct PostCreationView: View {
     }
     
     private func createPost() {
-        guard canPost else { return }
-        
+        guard canPost else {
+            print("[PostCreationView] ❌ createPost blocked: canPost=false")
+            return
+        }
+
+        print("[PostCreationView] 🚀 createPost started")
+        print("[PostCreationView] 📝 postContent: \"\(postContent)\"")
+        print("[PostCreationView] 🎤 recordedAudioURL: \(recordedAudioURL?.absoluteString ?? "nil")")
+        print("[PostCreationView] 📍 selectedLocation: \(selectedLocation != nil ? "available" : "nil")")
+        print("[PostCreationView] 👤 userID: \(authService.currentUser?.id.uuidString ?? "nil")")
+
         isUploading = true
-        
+
         Task {
             do {
-                let request = CreatePostRequest(
-                    content: postContent,
-                    url: urlInput.isEmpty ? nil : urlInput,
-                    urlMetadata: urlMetadata,
-                    latitude: selectedLocation?.latitude,
-                    longitude: selectedLocation?.longitude,
-                    locationName: locationName,
-                    visibility: visibility,
-                    allowComments: allowComments,
-                    emergencyLevel: emergencyLevel,
-                    tags: Array(tags),
-                    images: []
-                )
-                
-                await postService.createPost(request)
+                // 音声付き投稿の場合（ステータス+音声の組み合わせを含む）
+                if let audioURL = recordedAudioURL,
+                   let userID = authService.currentUser?.id,
+                   let latitude = selectedLocation?.latitude,
+                   let longitude = selectedLocation?.longitude {
+
+                    print("[PostCreationView] ✅ Audio post conditions met")
+                    print("[PostCreationView] 🎤 audioURL: \(audioURL.absoluteString)")
+                    print("[PostCreationView] 📂 audioURL exists: \(FileManager.default.fileExists(atPath: audioURL.path))")
+
+                    if FileManager.default.fileExists(atPath: audioURL.path) {
+                        let attributes = try? FileManager.default.attributesOfItem(atPath: audioURL.path)
+                        let fileSize = attributes?[.size] as? Int64 ?? 0
+                        print("[PostCreationView] 📦 audioURL file size: \(fileSize) bytes")
+                    }
+
+                    print("[PostCreationView] 📤 Calling createPostWithAudio...")
+
+                    // 音声付き投稿（ステータスの有無にかかわらず通常投稿として扱う）
+                    try await postService.createPostWithAudio(
+                        content: postContent,
+                        audioFileURL: audioURL,
+                        latitude: latitude,
+                        longitude: longitude,
+                        address: locationName,
+                        userID: userID
+                    )
+
+                    print("[PostCreationView] ✅ Post with audio created. Content: \(postContent)")
+
+                } else {
+                    print("[PostCreationView] ⚠️ Audio post conditions NOT met - creating normal post")
+                    print("[PostCreationView]   - recordedAudioURL: \(recordedAudioURL?.absoluteString ?? "nil")")
+                    print("[PostCreationView]   - userID: \(authService.currentUser?.id.uuidString ?? "nil")")
+                    print("[PostCreationView]   - latitude: \(selectedLocation?.latitude.description ?? "nil")")
+                    print("[PostCreationView]   - longitude: \(selectedLocation?.longitude.description ?? "nil")")
+
+                    // 通常の投稿（音声なし）
+                    let request = CreatePostRequest(
+                        content: postContent,
+                        url: urlInput.isEmpty ? nil : urlInput,
+                        urlMetadata: urlMetadata,
+                        latitude: selectedLocation?.latitude,
+                        longitude: selectedLocation?.longitude,
+                        locationName: locationName,
+                        visibility: visibility,
+                        allowComments: allowComments,
+                        emergencyLevel: emergencyLevel,
+                        tags: Array(tags),
+                        images: []
+                    )
+
+                    await postService.createPost(request)
+                }
 
                 await MainActor.run {
                     isUploading = false
                     dismiss()
                 }
-                
+
             } catch {
+                print("[PostCreationView] ❌ Post creation failed: \(error.localizedDescription)")
+                print("[PostCreationView] Error details: \(error)")
                 await MainActor.run {
                     isUploading = false
+                    // エラーメッセージを表示（オプション）
                 }
             }
         }
@@ -711,6 +849,95 @@ struct PostCreationView: View {
                 await MainActor.run {
                     self.isLoadingMetadata = false
                 }
+            }
+        }
+    }
+
+    // MARK: - Status Post Handlers
+
+    /// ステータスボタンがタップされた時の処理
+    /// - Parameter status: 選択されたステータス
+    private func handleStatusTapped(_ status: StatusType) {
+        // ステータステキストをテキストフィールドに自動入力
+        postContent = status.rawValue
+
+        // ステータスを選択状態にする
+        selectedStatus = status
+
+        // 音声が録音されている場合は、ワンタップ投稿をスキップ
+        // ユーザーが手動で投稿ボタンを押す必要がある
+        if recordedAudioURL != nil {
+            print("[PostCreationView] Audio recorded. Skipping one-tap post. User must manually submit.")
+            return
+        }
+
+        // 音声が録音されていない場合のみワンタップ投稿を実行
+
+        // 位置情報が取得済みかチェック
+        guard let location = selectedLocation else {
+            // 位置情報が未取得の場合、エラートーストを表示
+            showToastMessage("位置情報を取得できません。位置情報サービスを有効にしてください", duration: 2.0)
+            selectedStatus = nil
+            return
+        }
+
+        // ワンタップ投稿を実行（音声なしの場合のみ）
+        createStatusPost(status: status, location: location)
+    }
+
+    /// ステータス投稿を作成
+    /// - Parameters:
+    ///   - status: ステータスタイプ
+    ///   - location: 位置情報
+    private func createStatusPost(status: StatusType, location: CLLocationCoordinate2D) {
+        isUploading = true
+
+        Task {
+            do {
+                // PostServiceのcreateStatusPostを呼び出し
+                try await postService.createStatusPost(
+                    status: status,
+                    location: location
+                )
+
+                await MainActor.run {
+                    isUploading = false
+
+                    // 投稿成功トーストを表示（0.5秒間）
+                    showToastMessage("投稿しました", duration: 0.5)
+
+                    // 0.5秒後に画面を自動クローズ
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        dismiss()
+                    }
+                }
+
+            } catch {
+                await MainActor.run {
+                    isUploading = false
+
+                    // エラートーストを表示
+                    showToastMessage("投稿に失敗しました。もう一度お試しください", duration: 2.0)
+                    selectedStatus = nil
+                }
+            }
+        }
+    }
+
+    /// トーストメッセージを表示
+    /// - Parameters:
+    ///   - message: 表示するメッセージ
+    ///   - duration: 表示時間（秒）
+    private func showToastMessage(_ message: String, duration: TimeInterval) {
+        toastMessage = message
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            showToast = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                showToast = false
             }
         }
     }
@@ -1079,32 +1306,282 @@ struct CompactAttachmentIndicator: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "paperclip.circle.fill")
-                    .font(.title3)
+                    .font(.body)
 
-                Text("添付ファイル")
-                    .font(.subheadline)
+                Text("添付")
+                    .font(.caption)
                     .fontWeight(.medium)
 
                 if count > 0 {
                     Text("\(count)")
-                        .font(.caption)
+                        .font(.caption2)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
                         .background(Color.blue)
                         .clipShape(Capsule())
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(.ultraThinMaterial)
             .clipShape(Capsule())
-            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Inline Audio Recorder View
+
+/// 投稿画面内に埋め込む音声録音UI
+/// SwiftUIらしい洗練されたインラインコンポーネント
+struct InlineAudioRecorderView: View {
+    @ObservedObject var audioService: AudioService
+    @Binding var recordedAudioURL: URL?
+    @Binding var isRecording: Bool
+    @Binding var recordingTime: TimeInterval
+
+    @State private var showingPlayer = false
+    @State private var audioPlayerService = AudioService()
+    @State private var isPlaying = false
+    @Namespace private var animation
+
+    var body: some View {
+        VStack(spacing: 6) {
+            if recordedAudioURL == nil {
+                // 未録音状態: 録音ボタン
+                recordButton
+            } else if isRecording {
+                // 録音中: 波形表示とタイマー
+                recordingView
+            } else {
+                // 録音済み: 再生UIと削除ボタン
+                playbackView
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.systemGray6))
+                .shadow(color: .black.opacity(0.05), radius: 3, x: 0, y: 1)
+        )
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isRecording)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: recordedAudioURL != nil)
+    }
+
+    // MARK: - Record Button
+
+    private var recordButton: some View {
+        Button(action: startRecording) {
+            HStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(Color.red.opacity(0.15))
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.red)
+                }
+                .matchedGeometryEffect(id: "micIcon", in: animation)
+
+                Text("音声を録音")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Recording View
+
+    private var recordingView: some View {
+        HStack(spacing: 8) {
+            // 録音中アニメーション
+            ZStack {
+                Circle()
+                    .fill(Color.red.opacity(0.15))
+                    .frame(width: 28, height: 28)
+
+                Circle()
+                    .stroke(Color.red, lineWidth: 1.5)
+                    .frame(width: 28, height: 28)
+                    .scaleEffect(isRecording ? 1.2 : 1.0)
+                    .opacity(isRecording ? 0 : 1)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: false), value: isRecording)
+
+                Image(systemName: "waveform")
+                    .font(.system(size: 12))
+                    .foregroundColor(.red)
+            }
+            .matchedGeometryEffect(id: "micIcon", in: animation)
+
+            Text("録音中")
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .foregroundColor(.red)
+
+            Text(timeString(from: recordingTime))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+
+            Spacer()
+
+            // 停止ボタン
+            Button(action: stopRecording) {
+                ZStack {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 28, height: 28)
+
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.white)
+                        .frame(width: 10, height: 10)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Playback View
+
+    private var playbackView: some View {
+        HStack(spacing: 8) {
+            // 再生ボタン
+            Button(action: togglePlayback) {
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.15))
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.blue)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Text("音声")
+                .font(.caption2)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+
+            Text(timeString(from: audioService.getDuration()))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+
+            Spacer()
+
+            // 削除ボタン
+            Button(action: deleteRecording) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12))
+                    .foregroundColor(.red)
+                    .frame(width: 28, height: 28)
+                    .background(Color.red.opacity(0.1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Actions
+
+    private func startRecording() {
+        Task { @MainActor in
+            do {
+                isRecording = true
+                let url = try await audioService.startRecording()
+                recordedAudioURL = url
+
+                // タイマー更新を監視
+                Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak audioService] timer in
+                    guard let audioService = audioService else {
+                        timer.invalidate()
+                        return
+                    }
+                    Task { @MainActor in
+                        self.recordingTime = audioService.recordingTime
+                        if !audioService.isRecording {
+                            timer.invalidate()
+                        }
+                    }
+                }
+            } catch {
+                isRecording = false
+                print("Recording failed: \(error)")
+            }
+        }
+    }
+
+    private func stopRecording() {
+        audioService.stopRecording()
+        isRecording = false
+    }
+
+    private func togglePlayback() {
+        guard let url = recordedAudioURL else { return }
+
+        if isPlaying {
+            audioPlayerService.pauseAudio()
+            isPlaying = false
+        } else {
+            Task { @MainActor in
+                do {
+                    try await audioPlayerService.playAudio(from: url)
+                    isPlaying = true
+
+                    // 再生終了を監視
+                    Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak audioPlayerService] timer in
+                        guard let audioPlayerService = audioPlayerService else {
+                            timer.invalidate()
+                            return
+                        }
+                        Task { @MainActor in
+                            if !audioPlayerService.isPlaying {
+                                self.isPlaying = false
+                                timer.invalidate()
+                            }
+                        }
+                    }
+                } catch {
+                    print("Playback failed: \(error)")
+                }
+            }
+        }
+    }
+
+    private func deleteRecording() {
+        audioPlayerService.stopAudio()
+        isPlaying = false
+
+        if let url = recordedAudioURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+
+        recordedAudioURL = nil
+        recordingTime = 0
+    }
+
+    // MARK: - Helpers
+
+    private func timeString(from timeInterval: TimeInterval) -> String {
+        let minutes = Int(timeInterval) / 60
+        let seconds = Int(timeInterval) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 }
 

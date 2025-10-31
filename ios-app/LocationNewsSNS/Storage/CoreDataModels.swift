@@ -91,7 +91,10 @@ extension CachedPost {
             commentCount: Int(commentCount),
             shareCount: Int(shareCount),
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            audioURL: nil,
+            isStatusPost: false,
+            expiresAt: nil
         )
     }
 }

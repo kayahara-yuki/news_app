@@ -215,8 +215,11 @@ class LocationService: NSObject, ObservableObject, LocationServiceProtocol {
 extension LocationService: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else {
+            print("⚠️ [LocationService] 位置情報更新: locationsが空")
             return
         }
+
+        print("📍 [LocationService] 位置情報更新成功 - lat: \(location.coordinate.latitude), lng: \(location.coordinate.longitude), accuracy: \(location.horizontalAccuracy)m")
 
         currentLocation = location
         currentLocationData = LocationData(
@@ -237,16 +240,22 @@ extension LocationService: CLLocationManagerDelegate {
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("❌ [LocationService] 位置情報取得エラー: \(error.localizedDescription)")
+
         if let clError = error as? CLError {
             switch clError.code {
             case .denied:
                 errorMessage = "位置情報の使用が拒否されました"
+                print("🚫 [LocationService] CLError.denied - 位置情報の使用が拒否されました")
             case .locationUnknown:
                 errorMessage = "位置情報を取得できませんでした"
+                print("❓ [LocationService] CLError.locationUnknown - 位置情報を取得できませんでした")
             case .network:
                 errorMessage = "ネットワークエラーにより位置情報を取得できませんでした"
+                print("🌐 [LocationService] CLError.network - ネットワークエラー")
             default:
                 errorMessage = "位置情報の取得に失敗しました: \(error.localizedDescription)"
+                print("⚠️ [LocationService] CLError.other (code: \(clError.code.rawValue))")
             }
         } else {
             errorMessage = "位置情報の取得に失敗しました: \(error.localizedDescription)"
@@ -260,6 +269,7 @@ extension LocationService: CLLocationManagerDelegate {
     }
     
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        print("🔐 [LocationService] 位置情報認証ステータス変更: \(status.rawValue) (\(statusDescription(status)))")
         authorizationStatus = status
 
         // 位置情報サービスの有効状態を更新（デリゲートメソッド内で安全に取得）
@@ -272,18 +282,34 @@ extension LocationService: CLLocationManagerDelegate {
         switch status {
         #if os(macOS)
         case .authorizedAlways:
+            print("✅ [LocationService] 位置情報許可済み (Always) - 位置情報取得を開始")
             startLocationUpdates()
         #else
         case .authorizedWhenInUse, .authorizedAlways:
+            print("✅ [LocationService] 位置情報許可済み - 位置情報取得を開始")
             startLocationUpdates()
         #endif
         case .denied, .restricted:
+            print("🚫 [LocationService] 位置情報が拒否/制限されています")
             stopLocationUpdates()
             errorMessage = "位置情報の使用が許可されていません"
         case .notDetermined:
+            print("❓ [LocationService] 位置情報の許可が未決定")
             break
         @unknown default:
+            print("⚠️ [LocationService] 不明な認証ステータス")
             break
+        }
+    }
+
+    private func statusDescription(_ status: CLAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "未決定"
+        case .restricted: return "制限"
+        case .denied: return "拒否"
+        case .authorizedAlways: return "常に許可"
+        case .authorizedWhenInUse: return "使用中のみ許可"
+        @unknown default: return "不明"
         }
     }
 }

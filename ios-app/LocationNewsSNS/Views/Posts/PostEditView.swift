@@ -24,7 +24,15 @@ struct PostEditView: View {
     @State private var emergencyLevel: EmergencyLevel?
     @State private var tags: Set<String>
     @State private var newTag = ""
-    
+
+    // 音声/ステータス関連
+    @State private var audioURL: String?
+    @State private var isStatusPost: Bool
+    @State private var expiresAt: Date?
+    @State private var recordedAudioURL: URL?
+    @State private var showAudioRecorder = false
+    @StateObject private var audioRecorderViewModel = AudioRecorderViewModel()
+
     @State private var showingLocationPicker = false
     @State private var showingDeleteAlert = false
     @State private var showingDiscardAlert = false
@@ -49,6 +57,11 @@ struct PostEditView: View {
         self._emergencyLevel = State(initialValue: nil) // emergencyLevelは削除されたためnil
         self._tags = State(initialValue: Set()) // TODO: Post モデルにtagsプロパティを追加
         self._existingMediaFiles = State(initialValue: []) // mediaFilesは削除されたため空配列
+
+        // 音声/ステータス情報を保持
+        self._audioURL = State(initialValue: post.audioURL)
+        self._isStatusPost = State(initialValue: post.isStatusPost)
+        self._expiresAt = State(initialValue: post.expiresAt)
     }
     
     var body: some View {
@@ -76,7 +89,10 @@ struct PostEditView: View {
                     
                     // メディア編集
                     mediaEditSection
-                    
+
+                    // 音声編集
+                    audioEditSection
+
                     // 位置情報編集
                     locationEditSection
                     
@@ -264,8 +280,162 @@ struct PostEditView: View {
         }
     }
     
+    // MARK: - Audio Edit Section
+
+    @ViewBuilder
+    private var audioEditSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("音声メッセージ")
+                    .font(.headline)
+
+                Spacer()
+
+                if audioURL != nil || recordedAudioURL != nil {
+                    Button(action: { showAudioRecorder = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "mic.badge.plus")
+                            Text("再録音")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                } else {
+                    Button(action: { showAudioRecorder = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "mic.badge.plus")
+                            Text("音声を追加")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                }
+            }
+
+            // 既存の音声ファイル表示
+            if let audioURLString = audioURL, let url = URL(string: audioURLString) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "waveform")
+                            .foregroundColor(.blue)
+                        Text("録音済み音声")
+                            .font(.body)
+                    }
+
+                    // 音声プレイヤーを表示
+                    AudioPlayerView(
+                        audioURL: url,
+                        audioService: audioRecorderViewModel.audioService
+                    )
+                    .padding(.vertical, 8)
+
+                    Button(role: .destructive) {
+                        audioURL = nil
+                        checkForChanges()
+                    } label: {
+                        Label("音声を削除", systemImage: "trash")
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+            }
+
+            // 新規録音された音声
+            if let recordedURL = recordedAudioURL {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "waveform.circle.fill")
+                            .foregroundColor(.green)
+                        Text("新しい音声")
+                            .font(.body)
+                    }
+
+                    AudioPlayerView(
+                        audioURL: recordedURL,
+                        audioService: audioRecorderViewModel.audioService
+                    )
+                    .padding(.vertical, 8)
+
+                    Button(role: .destructive) {
+                        recordedAudioURL = nil
+                        checkForChanges()
+                    } label: {
+                        Label("新しい音声を削除", systemImage: "trash")
+                    }
+                }
+                .padding()
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(12)
+            }
+        }
+        .sheet(isPresented: $showAudioRecorder) {
+            audioRecorderSheet
+        }
+    }
+
+    // MARK: - Audio Recorder Sheet
+
+    @ViewBuilder
+    private var audioRecorderSheet: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                // 音声録音UI
+                AudioRecorderView(viewModel: audioRecorderViewModel)
+                    .padding()
+
+                // 録音完了後のプレイヤー
+                if let audioURL = audioRecorderViewModel.audioFileURL,
+                   audioRecorderViewModel.recordingState == .stopped {
+                    Divider()
+
+                    VStack(spacing: 12) {
+                        Text("録音完了")
+                            .font(.headline)
+
+                        AudioPlayerView(
+                            audioURL: audioURL,
+                            audioService: audioRecorderViewModel.audioService
+                        )
+                        .padding()
+
+                        // 採用ボタン
+                        Button(action: {
+                            recordedAudioURL = audioURL
+                            // 既存の音声URLをクリア（新しい音声で置き換え）
+                            self.audioURL = nil
+                            showAudioRecorder = false
+                            checkForChanges()
+                        }) {
+                            Text("この録音を使用")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .cornerRadius(12)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+
+                Spacer()
+            }
+            .navigationTitle("音声メッセージ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") {
+                        audioRecorderViewModel.cancelRecording()
+                        showAudioRecorder = false
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Location Edit Section
-    
+
     @ViewBuilder
     private var locationEditSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -459,7 +629,9 @@ struct PostEditView: View {
                     selectedLocation?.latitude != post.latitude ||
                     selectedLocation?.longitude != post.longitude ||
                     visibility != post.visibility ||
-                    !selectedImages.isEmpty
+                    !selectedImages.isEmpty ||
+                    audioURL != post.audioURL ||
+                    recordedAudioURL != nil
                     // emergencyLevelとmediaFilesは削除されたため比較から除外
     }
     
@@ -604,7 +776,10 @@ struct ExistingMediaGrid: View {
         commentCount: 2,
         shareCount: 1,
         createdAt: Date().addingTimeInterval(-3600),
-        updatedAt: Date()
+        updatedAt: Date(),
+        audioURL: nil,
+        isStatusPost: false,
+        expiresAt: nil
     ))
     .environmentObject(PostService())
     .environmentObject(AuthService())

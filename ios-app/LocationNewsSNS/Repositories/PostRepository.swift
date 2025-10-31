@@ -8,6 +8,7 @@ protocol PostRepositoryProtocol {
     func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double) async throws -> [Post]
     func getPost(id: UUID) async throws -> Post
     func createPost(_ request: CreatePostRequest) async throws -> Post
+    func createPostWithAudio(_ request: CreatePostRequest, audioURL: String) async throws -> Post
     func updatePost(_ post: Post) async throws -> Post
     func deletePost(id: UUID) async throws
     func likePost(id: UUID) async throws
@@ -39,6 +40,9 @@ class PostRepository: PostRepositoryProtocol {
     }
 
     nonisolated func fetchNearbyPosts(latitude: Double, longitude: Double, radius: Double = 10000) async throws -> [Post] {
+        print("🔍 [PostRepository] fetchNearbyPosts開始")
+        print("📍 [PostRepository] パラメータ: lat=\(latitude), lng=\(longitude), radius=\(radius)m")
+
         // キャッシュキーの生成（位置情報を10m単位で丸める）
         let roundedLat = round(latitude * 10000) / 10000 // 約10m精度
         let roundedLng = round(longitude * 10000) / 10000
@@ -47,8 +51,11 @@ class PostRepository: PostRepositoryProtocol {
         // キャッシュチェック
         if let cached = nearbyPostsCache.object(forKey: cacheKey),
            Date().timeIntervalSince(cached.timestamp) < cacheTTL {
+            print("✅ [PostRepository] キャッシュヒット: \(cached.posts.count)件")
             return cached.posts
         }
+
+        print("🔄 [PostRepository] キャッシュミス - RPC呼び出し実行")
 
         // PostGIS nearby_posts_with_user RPC関数を使用した近隣検索
         // デフォルト半径: 10km (10000m) - パフォーマンス最適化のため制限
@@ -70,16 +77,31 @@ class PostRepository: PostRepositoryProtocol {
             max_results: 50
         )
 
+        print("📤 [PostRepository] RPC呼び出し: nearby_posts_with_user")
+        print("📤 [PostRepository] RPCパラメータ: \(params)")
+
         let response: [NearbyPostResponse] = try await supabase
             .rpc("nearby_posts_with_user", params: params)
             .execute()
             .value
 
+        print("📥 [PostRepository] RPC応答受信: \(response.count)件")
+
+        if response.isEmpty {
+            print("⚠️ [PostRepository] 警告: RPCから0件の投稿が返されました")
+        } else {
+            print("✅ [PostRepository] 最初の投稿: id=\(response[0].id), content=\(response[0].content.prefix(30))...")
+        }
+
         let posts = try response.map { try $0.toPost() }
+
+        print("✅ [PostRepository] Post変換完了: \(posts.count)件")
 
         // キャッシュに保存
         let cachedPosts = CachedPosts(posts: posts, timestamp: Date())
         nearbyPostsCache.setObject(cachedPosts, forKey: cacheKey)
+
+        print("💾 [PostRepository] キャッシュ保存完了")
 
         return posts
     }
@@ -101,8 +123,25 @@ class PostRepository: PostRepositoryProtocol {
     }
     
     func createPost(_ request: CreatePostRequest) async throws -> Post {
-        let postRequest = PostRequest(from: request)
+        print("[PostRepository] 🚀 createPost started")
+        print("[PostRepository] 📝 content: \"\(request.content)\"")
+        print("[PostRepository] 📍 location: lat=\(request.latitude ?? 0), lng=\(request.longitude ?? 0)")
+        print("[PostRepository] 📍 locationName: \"\(request.locationName ?? "")\"")
 
+        // 現在のユーザーIDを取得
+        let currentUserID = try await getCurrentUserID()
+        print("[PostRepository] 👤 Current userID: \(currentUserID.uuidString)")
+
+        // PostRequestを作成（userIDを含む）
+        let postRequest = PostRequest(from: request, userID: currentUserID)
+
+        print("[PostRepository] 📤 PostRequest created")
+        print("[PostRepository] 📤 PostRequest fields: userID=\(postRequest.userID?.uuidString ?? "nil"), lat=\(postRequest.latitude ?? 0), lng=\(postRequest.longitude ?? 0)")
+        print("[PostRepository] 📤 Location (WKT): \(postRequest.location ?? "nil")")
+        print("[PostRepository] 📤 PostRequest: category=\(postRequest.category), visibility=\(postRequest.visibility)")
+        print("[PostRepository] 📤 PostRequest: isStatusPost=\(postRequest.isStatusPost ?? false), expiresAt=\(postRequest.expiresAt?.description ?? "nil")")
+
+        print("[PostRepository] 📤 Sending INSERT request to Supabase...")
         let response: PostResponse = try await supabase
             .from("posts")
             .insert(postRequest)
@@ -114,11 +153,60 @@ class PostRepository: PostRepositoryProtocol {
             .execute()
             .value
 
+        print("[PostRepository] ✅ Supabase response received")
+        print("[PostRepository] ✅ Response: id=\(response.id), content=\"\(response.content.prefix(30))...\"")
+        print("[PostRepository] ✅ Response: lat=\(response.latitude ?? 0), lng=\(response.longitude ?? 0), address=\"\(response.address ?? "")\"")
+        print("[PostRepository] ✅ Response: isStatusPost=\(response.isStatusPost), expiresAt=\(response.expiresAt ?? "nil")")
+
         // TODO: メディアファイル処理は実装時に追加
         // 画像データはUIImage形式で保持されているため、
         // アップロード処理が必要です
 
-        return try response.toPost()
+        let post = try response.toPost()
+        print("[PostRepository] ✅ Post object created successfully")
+        print("[PostRepository] ✅ Post.canShowOnMap: \(post.canShowOnMap)")
+        return post
+    }
+
+    /// 音声付き投稿を作成
+    /// - Parameters:
+    ///   - request: 投稿作成リクエスト
+    ///   - audioURL: 音声ファイルのURL
+    /// - Returns: 作成された投稿
+    func createPostWithAudio(_ request: CreatePostRequest, audioURL: String) async throws -> Post {
+        print("[PostRepository] 🚀 createPostWithAudio started")
+        print("[PostRepository] 📝 content: \"\(request.content)\"")
+        print("[PostRepository] 🎤 audioURL: \(audioURL)")
+        print("[PostRepository] 📍 location: lat=\(request.latitude ?? 0), lng=\(request.longitude ?? 0)")
+
+        // 現在のユーザーIDを取得
+        let currentUserID = try await getCurrentUserID()
+        print("[PostRepository] 👤 Current userID: \(currentUserID.uuidString)")
+
+        // PostRequestを作成（userIDとaudioURLを含む）
+        let postRequest = PostRequest(from: request, userID: currentUserID, audioURL: audioURL)
+
+        print("[PostRepository] 📤 PostRequest created with audioURL")
+        print("[PostRepository] 📤 PostRequest: userID=\(postRequest.userID?.uuidString ?? "nil"), isStatusPost=\(postRequest.isStatusPost ?? false)")
+
+        print("[PostRepository] 📤 Sending INSERT request to Supabase...")
+        let response: PostResponse = try await supabase
+            .from("posts")
+            .insert(postRequest)
+            .select("""
+                *,
+                users!posts_user_id_fkey(id, username, display_name, avatar_url, is_verified, role, privacy_settings, email, bio, location, created_at, updated_at)
+            """)
+            .single()
+            .execute()
+            .value
+
+        print("[PostRepository] ✅ Supabase response received")
+        print("[PostRepository] ✅ Response: id=\(response.id), audioURL=\(response.audioURL ?? "nil")")
+
+        let post = try response.toPost()
+        print("[PostRepository] ✅ Post with audio created successfully")
+        return post
     }
     
     func updatePost(_ post: Post) async throws -> Post {
@@ -395,6 +483,10 @@ struct PostRequest: Encodable {
     let category: String
     let visibility: String
     let isUrgent: Bool
+    let audioURL: String?
+    let isStatusPost: Bool?
+    let expiresAt: Date?
+    let location: String?  // PostGIS POINT in WKT format: "POINT(lng lat)"
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -407,6 +499,10 @@ struct PostRequest: Encodable {
         case category
         case visibility
         case isUrgent = "is_urgent"
+        case audioURL = "audio_url"
+        case isStatusPost = "is_status_post"
+        case expiresAt = "expires_at"
+        case location
     }
 
     func encode(to encoder: Encoder) throws {
@@ -421,11 +517,15 @@ struct PostRequest: Encodable {
         try container.encode(category, forKey: .category)
         try container.encode(visibility, forKey: .visibility)
         try container.encode(isUrgent, forKey: .isUrgent)
+        try container.encodeIfPresent(audioURL, forKey: .audioURL)
+        try container.encodeIfPresent(isStatusPost, forKey: .isStatusPost)
+        try container.encodeIfPresent(expiresAt, forKey: .expiresAt)
+        try container.encodeIfPresent(location, forKey: .location)
     }
-    
-    init(from request: CreatePostRequest) {
+
+    init(from request: CreatePostRequest, userID: UUID, audioURL: String? = nil) {
         self.id = nil
-        self.userID = nil // TODO: 現在のユーザーIDを設定
+        self.userID = userID
         self.content = request.content
         self.url = nil // CreatePostRequestにはurl不要
         self.latitude = request.latitude
@@ -436,8 +536,20 @@ struct PostRequest: Encodable {
         self.category = "social"
         self.visibility = request.visibility.rawValue
         self.isUrgent = request.emergencyLevel != nil
+
+        // 音声・ステータス関連フィールド
+        self.audioURL = audioURL
+        self.isStatusPost = request.isStatusPost
+        self.expiresAt = request.expiresAt
+
+        // PostGIS location (WKT format: "POINT(longitude latitude)")
+        if let lat = request.latitude, let lng = request.longitude {
+            self.location = "POINT(\(lng) \(lat))"
+        } else {
+            self.location = nil
+        }
     }
-    
+
     init(from post: Post) {
         self.id = post.id
         self.userID = post.user.id
@@ -449,7 +561,18 @@ struct PostRequest: Encodable {
         self.category = post.category.rawValue
         self.visibility = post.visibility.rawValue
         self.isUrgent = post.isUrgent
+        self.audioURL = post.audioURL
+        self.isStatusPost = post.isStatusPost
+        self.expiresAt = post.expiresAt
+
+        // PostGIS location (WKT format: "POINT(longitude latitude)")
+        if let lat = post.latitude, let lng = post.longitude {
+            self.location = "POINT(\(lng) \(lat))"
+        } else {
+            self.location = nil
+        }
     }
+
 }
 
 struct PostResponse: Decodable {
@@ -470,6 +593,9 @@ struct PostResponse: Decodable {
     let createdAt: String
     let updatedAt: String
     let user: UserResponse?
+    let audioURL: String?
+    let isStatusPost: Bool
+    let expiresAt: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -489,6 +615,9 @@ struct PostResponse: Decodable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case user = "users"
+        case audioURL = "audio_url"
+        case isStatusPost = "is_status_post"
+        case expiresAt = "expires_at"
     }
 
     init(from decoder: Decoder) throws {
@@ -510,6 +639,9 @@ struct PostResponse: Decodable {
         createdAt = try container.decode(String.self, forKey: .createdAt)
         updatedAt = try container.decode(String.self, forKey: .updatedAt)
         user = try container.decodeIfPresent(UserResponse.self, forKey: .user)
+        audioURL = try container.decodeIfPresent(String.self, forKey: .audioURL)
+        isStatusPost = try container.decodeIfPresent(Bool.self, forKey: .isStatusPost) ?? false
+        expiresAt = try container.decodeIfPresent(String.self, forKey: .expiresAt)
     }
     
     func toPost() throws -> Post {
@@ -562,6 +694,11 @@ struct PostResponse: Decodable {
 
         let userProfile = try userResponse.toUserProfile()
 
+        let expiresAtDate: Date? = {
+            guard let expiresAtString = expiresAt else { return nil }
+            return parseDate(expiresAtString, fieldName: "expiresAt")
+        }()
+
         return Post(
             id: id,
             user: userProfile,
@@ -578,7 +715,10 @@ struct PostResponse: Decodable {
             commentCount: commentCount,
             shareCount: shareCount,
             createdAt: createdDate,
-            updatedAt: updatedDate
+            updatedAt: updatedDate,
+            audioURL: audioURL,
+            isStatusPost: isStatusPost,
+            expiresAt: expiresAtDate
         )
     }
 }
@@ -740,6 +880,9 @@ struct NearbyPostResponse: Decodable {
     let createdAt: String
     let updatedAt: String
     let distanceMeters: Double
+    let audioURL: String?
+    let isStatusPost: Bool?
+    let expiresAt: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -764,6 +907,9 @@ struct NearbyPostResponse: Decodable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case distanceMeters = "distance_meters"
+        case audioURL = "audio_url"
+        case isStatusPost = "is_status_post"
+        case expiresAt = "expires_at"
     }
 
     func toPost() throws -> Post {
@@ -824,6 +970,11 @@ struct NearbyPostResponse: Decodable {
             updatedAt: Date()  // RPC関数からは返されない
         )
 
+        let expiresAtDate: Date? = {
+            guard let expiresAtString = expiresAt else { return nil }
+            return parseDate(expiresAtString, fieldName: "expiresAt")
+        }()
+
         return Post(
             id: id,
             user: userProfile,
@@ -840,7 +991,10 @@ struct NearbyPostResponse: Decodable {
             commentCount: commentCount,
             shareCount: shareCount,
             createdAt: createdDate,
-            updatedAt: updatedDate
+            updatedAt: updatedDate,
+            audioURL: audioURL,
+            isStatusPost: isStatusPost ?? false,
+            expiresAt: expiresAtDate
         )
     }
 }

@@ -7,7 +7,7 @@ import Combine
 @MainActor
 class NearbyPostsViewModel: ObservableObject {
     @Published var posts: [Post] = []
-    @Published var isLoading = false
+    @Published var isLoading = true // 初期状態をtrueに変更（アプリ起動時のロード中状態）
     @Published var errorMessage: String?
 
     private let dependencies = DependencyContainer.shared
@@ -19,10 +19,12 @@ class NearbyPostsViewModel: ObservableObject {
 
     init() {
         setupBindings()
+        setupNotificationObservers()
     }
 
     deinit {
         cancellables.removeAll()
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Setup
@@ -43,6 +45,51 @@ class NearbyPostsViewModel: ObservableObject {
                     }
                 }
                 .store(in: &cancellables)
+        }
+    }
+
+    private func setupNotificationObservers() {
+        // 投稿更新の通知を監視
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePostUpdated(_:)),
+            name: .postUpdated,
+            object: nil
+        )
+    }
+
+    @objc private func handlePostUpdated(_ notification: Notification) {
+        guard let postId = notification.userInfo?["postId"] as? UUID,
+              let likeCount = notification.userInfo?["likeCount"] as? Int else {
+            return
+        }
+
+        // posts配列内の該当する投稿を更新
+        if let index = posts.firstIndex(where: { $0.id == postId }) {
+            let originalPost = posts[index]
+            let updatedPost = Post(
+                id: originalPost.id,
+                user: originalPost.user,
+                content: originalPost.content,
+                url: originalPost.url,
+                latitude: originalPost.latitude,
+                longitude: originalPost.longitude,
+                address: originalPost.address,
+                category: originalPost.category,
+                visibility: originalPost.visibility,
+                isUrgent: originalPost.isUrgent,
+                isVerified: originalPost.isVerified,
+                likeCount: likeCount,
+                commentCount: originalPost.commentCount,
+                shareCount: originalPost.shareCount,
+                createdAt: originalPost.createdAt,
+                updatedAt: originalPost.updatedAt,
+                audioURL: originalPost.audioURL,
+                isStatusPost: originalPost.isStatusPost,
+                expiresAt: originalPost.expiresAt
+            )
+
+            posts[index] = updatedPost
         }
     }
 
@@ -114,10 +161,14 @@ class NearbyPostsViewModel: ObservableObject {
         longitude: Double,
         radius: Double
     ) async {
+        print("🌟 [NearbyPostsViewModel] fetchNearbyPostsForCoordinate開始")
+        print("📍 [NearbyPostsViewModel] パラメータ: lat=\(latitude), lng=\(longitude), radius=\(radius)m")
+
         do {
             isLoading = true
             errorMessage = nil
 
+            print("📡 [NearbyPostsViewModel] PostService呼び出し中...")
             await dependencies.postService.fetchNearbyPosts(
                 latitude: latitude,
                 longitude: longitude,
@@ -128,6 +179,12 @@ class NearbyPostsViewModel: ObservableObject {
             let userLocation = CLLocation(latitude: latitude, longitude: longitude)
             if let postService = dependencies.postService as? PostService {
                 let nearbyPosts = postService.nearbyPosts
+
+                print("📊 [NearbyPostsViewModel] PostServiceから取得: \(nearbyPosts.count)件")
+
+                if nearbyPosts.isEmpty {
+                    print("⚠️ [NearbyPostsViewModel] 警告: PostServiceから0件の投稿")
+                }
 
                 // 距離計算をバックグラウンドで実行
                 let postsWithDistance = await Task.detached {
@@ -143,12 +200,20 @@ class NearbyPostsViewModel: ObservableObject {
 
                 // メインスレッドで結果を設定
                 posts = postsWithDistance
+                print("✅ [NearbyPostsViewModel] posts配列更新完了: \(posts.count)件")
+
+                if !posts.isEmpty {
+                    print("✅ [NearbyPostsViewModel] 最初の投稿: id=\(posts[0].id), content=\(posts[0].content.prefix(30))...")
+                }
             } else {
+                print("❌ [NearbyPostsViewModel] PostServiceのキャストに失敗")
                 AppLogger.error("PostServiceのキャストに失敗")
             }
 
             isLoading = false
         } catch {
+            print("❌ [NearbyPostsViewModel] エラー発生: \(error)")
+            print("❌ [NearbyPostsViewModel] エラー詳細: \(error.localizedDescription)")
             AppLogger.error("エラー: \(error.localizedDescription)")
             errorMessage = "投稿の取得に失敗しました: \(error.localizedDescription)"
             isLoading = false

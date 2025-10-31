@@ -14,6 +14,7 @@ private struct SafariView: UIViewControllerRepresentable {
         let vc = SFSafariViewController(url: url, configuration: configuration)
         vc.dismissButtonStyle = .close
         vc.preferredControlTintColor = .systemBlue
+
         return vc
     }
 
@@ -35,6 +36,18 @@ struct IdentifiableURL: Identifiable {
     }
 }
 
+// MARK: - Sheet Content View
+
+/// シート表示用のコンテンツビュー
+private struct SheetContentView: View {
+    let url: URL
+
+    var body: some View {
+        SafariView(url: url)
+            .ignoresSafeArea()
+    }
+}
+
 // MARK: - Safari Sheet Modifier
 
 /// アプリ内ブラウザ(SFSafariViewController)でURLを開くためのViewModifier
@@ -53,8 +66,7 @@ struct SafariSheetModifier: ViewModifier {
                 }
             })
             .sheet(item: $identifiableURL) { identifiableURL in
-                SafariView(url: identifiableURL.url)
-                    .ignoresSafeArea()
+                SheetContentView(url: identifiableURL.url)
             }
     }
 }

@@ -321,11 +321,11 @@ struct UserResponse: Codable {
     let isVerified: Bool
     let isOfficial: Bool?
     let role: String
-    let privacySettings: [String: String]?
+    let privacySettings: PrivacySettingsRaw?
     let createdAt: String
     let updatedAt: String
     let lastActiveAt: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case email
@@ -343,6 +343,55 @@ struct UserResponse: Codable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case lastActiveAt = "last_active_at"
+    }
+
+    /// SupabaseのJSONB privacy_settingsフィールドを柔軟にデコードするための構造体
+    struct PrivacySettingsRaw: Codable {
+        let locationSharing: Bool?
+        let locationPrecision: String?
+        let profileVisibility: String?
+        let emergencyOverride: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case locationSharing
+            case locationPrecision
+            case profileVisibility
+            case emergencyOverride
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+
+            // locationSharingをBoolまたはStringから柔軟にデコード
+            if let boolValue = try? container.decode(Bool.self, forKey: .locationSharing) {
+                locationSharing = boolValue
+            } else if let stringValue = try? container.decode(String.self, forKey: .locationSharing) {
+                locationSharing = stringValue.lowercased() == "true"
+            } else {
+                locationSharing = nil
+            }
+
+            locationPrecision = try? container.decode(String.self, forKey: .locationPrecision)
+            profileVisibility = try? container.decode(String.self, forKey: .profileVisibility)
+
+            // emergencyOverrideをBoolまたはStringから柔軟にデコード
+            if let boolValue = try? container.decode(Bool.self, forKey: .emergencyOverride) {
+                emergencyOverride = boolValue
+            } else if let stringValue = try? container.decode(String.self, forKey: .emergencyOverride) {
+                emergencyOverride = stringValue.lowercased() == "true"
+            } else {
+                emergencyOverride = nil
+            }
+        }
+
+        func toPrivacySettings() -> PrivacySettings {
+            return PrivacySettings(
+                locationSharing: locationSharing ?? true,
+                locationPrecision: locationPrecision,
+                profileVisibility: profileVisibility ?? "public",
+                emergencyOverride: emergencyOverride ?? true
+            )
+        }
     }
     
     func toUserProfile() throws -> UserProfile {
@@ -402,18 +451,8 @@ struct UserResponse: Codable {
         let updatedDate = parseDate(updatedAt, fieldName: "updatedAt")
         let lastActiveDate = lastActiveAt.map { parseDate($0, fieldName: "lastActiveAt") }
 
-        // プライバシー設定をデコード
-        var privacySettings: PrivacySettings?
-        if let settingsDict = self.privacySettings, let jsonString = settingsDict["data"] {
-            do {
-                let data = Data(jsonString.utf8)
-                privacySettings = try JSONDecoder().decode(PrivacySettings.self, from: data)
-            } catch {
-                privacySettings = PrivacySettings.default
-            }
-        } else {
-            privacySettings = PrivacySettings.default
-        }
+        // プライバシー設定を変換
+        let privacySettings = self.privacySettings?.toPrivacySettings() ?? PrivacySettings.default
 
         return UserProfile(
             id: id,

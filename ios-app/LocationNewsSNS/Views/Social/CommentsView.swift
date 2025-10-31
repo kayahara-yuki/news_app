@@ -24,9 +24,6 @@ struct CommentsView: View {
             commentInputArea
         }
         .navigationTitle("コメント")
-        .navigationBarItems(trailing: Button("完了") {
-            // 画面を閉じる
-        })
         .onAppear {
             loadComments()
         }
@@ -738,7 +735,10 @@ struct ReplyCommentView: View {
         commentCount: 5,
         shareCount: 2,
         createdAt: Date(),
-        updatedAt: Date()
+        updatedAt: Date(),
+        audioURL: nil,
+        isStatusPost: false,
+        expiresAt: nil
     ))
     .environmentObject(CommentService())
     .environmentObject(AuthService())

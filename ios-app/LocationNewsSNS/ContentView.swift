@@ -23,13 +23,14 @@ struct ContentView: View {
     @EnvironmentObject private var locationService: LocationService
     @StateObject private var newsService = NewsService()
 
-    // マップスクロール監視用
-    @State private var lastFetchedCoordinate: CLLocationCoordinate2D?
-    @State private var fetchTask: Task<Void, Never>?
-    @State private var isMapMoving = false // 地図移動中フラグ
+    @EnvironmentObject private var postService: PostService
+    @EnvironmentObject private var authService: AuthService
 
-    // 検索範囲の半径（メートル単位）
-    @State private var selectedRadius: Double = 2000 // デフォルト2km
+    // マップスクロール監視用の変数を削除
+    // 地図移動時の自動取得機能を無効化
+
+    // 検索範囲の半径（メートル単位）- 過去3日以内の全投稿を取得するため、距離フィルタは使用しない
+    // @State private var selectedRadius: Double = 2000 // デフォルト2km (不要)
 
     init() {
         // タブバーのアイコンとテキストの色を設定
@@ -93,12 +94,14 @@ struct ContentView: View {
         .safariSheet() // アプリ全体にSafariシート機能を適用
         .onAppear {
             // アプリ起動時に位置情報の許可をリクエスト
+            print("🗺️ [ContentView] アプリ起動 - 位置情報許可をリクエスト")
             locationService.requestPermission()
 
             // 位置情報が許可されていて現在地が取得できている場合、地図の初期位置を現在地に設定
             if locationService.authorizationStatus == .authorizedWhenInUse ||
                locationService.authorizationStatus == .authorizedAlways,
                let currentLocation = locationService.currentLocation {
+                print("📍 [ContentView] 位置情報取得成功: lat=\(currentLocation.coordinate.latitude), lng=\(currentLocation.coordinate.longitude)")
                 region = MKCoordinateRegion(
                     center: currentLocation.coordinate,
                     span: defaultMapSpan
@@ -106,32 +109,16 @@ struct ContentView: View {
 
                 // ニュースを取得
                 Task {
+                    print("📰 [ContentView] ニュース取得開始")
                     await newsService.fetchNearbyNews(userLocation: currentLocation.coordinate)
+                    print("📰 [ContentView] ニュース取得完了: 件数=\(newsService.nearbyNews.count)")
                 }
+            } else {
+                print("⚠️ [ContentView] 位置情報が取得できていません - authStatus=\(locationService.authorizationStatus.rawValue)")
             }
         }
-        .onChange(of: locationService.currentLocation) { newLocation in
-            // 位置情報が更新されたときに、初回のみ地図の中心を現在地に移動
-            // lastFetchedCoordinateがnilの場合は初回とみなす
-            if lastFetchedCoordinate == nil,
-               let location = newLocation {
-                region = MKCoordinateRegion(
-                    center: location.coordinate,
-                    span: defaultMapSpan
-                )
-            }
-        }
-        .onChange(of: viewModel.posts.map { $0.id }) { newPostIds in
-            if let selectedPost = selectedPinPost {
-                let isStillInRange = newPostIds.contains(selectedPost.id)
-                if !isStillInRange {
-                    withAnimation(springAnimation) {
-                        selectedPinPost = nil
-                        selectedCardPost = nil
-                    }
-                }
-            }
-        }
+        // 位置情報変更時の自動処理を削除（地図移動時の自動取得機能を無効化したため不要）
+        // 投稿リスト変更時の処理を削除（地図移動時の自動取得を無効化したため不要）
     }
 
     // MARK: - Map Tab View
@@ -158,10 +145,10 @@ struct ContentView: View {
                         }
                     }
                     .id(viewModel.posts.map { $0.id }) // Map全体の再描画を投稿IDリストで制御
-                    .overlay(
-                        // 選択された範囲の円を表示
-                        MapCircleOverlay(center: region.center, radius: selectedRadius, span: region.span)
-                    )
+                    // 距離フィルタを削除したため、円オーバーレイは不要
+                    // .overlay(
+                    //     MapCircleOverlay(center: region.center, radius: selectedRadius, span: region.span)
+                    // )
                     .ignoresSafeArea()
                     .onTapGesture {
                         withAnimation(springAnimation) {
@@ -169,48 +156,14 @@ struct ContentView: View {
                             selectedCardPost = nil
                         }
                     }
-                    .onChange(of: region.center) { newCenter in
-                        onMapRegionChanged(newCoordinate: newCenter)
-                    }
-                    .onChange(of: selectedRadius) { _ in
-                        // 範囲変更時に投稿を再取得
-                        onMapRegionChanged(newCoordinate: region.center)
-                    }
-
-                    // ローディングインジケータ（投稿取得中または地図移動中）
-                    if viewModel.isLoading || isMapMoving {
-                        VStack {
-                            HStack(spacing: 12) {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.9)
-
-                                Text("投稿取得中...")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(
-                                Capsule()
-                                    .fill(Color.black.opacity(0.75))
-                                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-                            )
-                            .padding(.top, 60)
-
-                            Spacer()
-                        }
-                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                        .zIndex(1)
-                    }
+                    // 地図移動時の自動取得を無効化（onChange削除）
 
                     // カスタムヘッダー（ナビゲーションバー不使用）
                     VStack(spacing: 8) {
                         HStack(alignment: .top) {
-                            // 左側: 距離選択ボタン
-                            RadiusSelectorView(selectedRadius: $selectedRadius)
-                                .padding(.leading, 16)
+                            // 距離フィルタを削除したため、距離選択ボタンは非表示
+                            // RadiusSelectorView(selectedRadius: $selectedRadius)
+                            //     .padding(.leading, 16)
 
                             Spacer()
 
@@ -247,16 +200,28 @@ struct ContentView: View {
                         }
                         .padding(.top, 8)
 
-                        // 投稿がない場合の上部バナー
-                        if viewModel.posts.isEmpty && !viewModel.isLoading {
+                        // 投稿がない場合の上部バナー（ローディング中と空状態の両方で使用）
+                        if viewModel.posts.isEmpty {
                             HStack(spacing: 8) {
-                                Image(systemName: "map.circle")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                if viewModel.isLoading {
+                                    // ローディング中
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle())
+                                        .scaleEffect(0.8)
 
-                                Text("近くに投稿がありません")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    Text("投稿を読み込み中...")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    // 空状態
+                                    Image(systemName: "map.circle")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+
+                                    Text("近くに投稿がありません")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
@@ -275,38 +240,42 @@ struct ContentView: View {
                         Spacer()
                     }
 
-                    // 新規投稿FABボタン（右下角）
+                    // FABボタン群（右下角）
                     VStack {
                         Spacer()
                         HStack {
                             Spacer()
-                            Button {
-                                showingPostCreation = true
+                            VStack(spacing: 16) {
+                                // 新規投稿FABボタン（プラス）
+                                Button {
+                                    showingPostCreation = true
 
-                                // ハプティックフィードバック
-                                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-                                impactFeedback.impactOccurred()
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 24, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .frame(width: 56, height: 56)
-                                    .background(
-                                        LinearGradient(
-                                            colors: [.blue, .blue.opacity(0.8)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
+                                    // ハプティックフィードバック
+                                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                    impactFeedback.impactOccurred()
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 24, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .frame(width: 56, height: 56)
+                                        .background(
+                                            LinearGradient(
+                                                colors: [.blue, .blue.opacity(0.8)],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
                                         )
-                                    )
-                                    .clipShape(Circle())
-                                    .shadow(color: .blue.opacity(0.4), radius: 12, x: 0, y: 6)
+                                        .clipShape(Circle())
+                                        .shadow(color: .blue.opacity(0.4), radius: 12, x: 0, y: 6)
+                                }
+                                .accessibilityLabel("新規投稿")
+                                .accessibilityHint("タップで投稿作成")
                             }
-                            .accessibilityLabel("新規投稿")
-                            .accessibilityHint("新しい投稿を作成します")
                             .padding(.trailing, 16)
-                            .padding(.bottom, viewModel.posts.isEmpty ? 30 : 200)
+                            .padding(.bottom, !newsService.nearbyNews.isEmpty ? 200 : 30)
                         }
                     }
+                    .zIndex(100) // ニュースカルーセルより前面に表示
 
                     // タブバーエリアを暗くするグラデーションオーバーレイ
                     VStack {
@@ -330,7 +299,7 @@ struct ContentView: View {
                             region: $region,
                             selectedNews: $selectedNews
                         )
-                        .padding(.bottom, 16)
+                        .padding(.bottom, 4)
                     }
                 }
                 .sheet(isPresented: $showingPostCreation) {
@@ -344,50 +313,8 @@ struct ContentView: View {
     }
 
     // MARK: - Map Region Changed
-
-    private func onMapRegionChanged(newCoordinate: CLLocationCoordinate2D) {
-        // 前回の取得位置から十分離れているかチェック（約500m以上）
-        if let lastCoordinate = lastFetchedCoordinate {
-            let distance = newCoordinate.distance(to: lastCoordinate)
-            if distance < 500 { // 500m未満の移動は無視
-                return
-            }
-        }
-
-        // 地図移動開始を即座に表示
-        isMapMoving = true
-
-        // 既存のタスクをキャンセル
-        fetchTask?.cancel()
-
-        // デバウンス処理: 1秒後に実行
-        fetchTask = Task { @MainActor in
-            do {
-                try await Task.sleep(nanoseconds: 1_000_000_000) // 1秒
-            } catch {
-                isMapMoving = false // キャンセル時もフラグをリセット
-                return // キャンセルされた場合は終了
-            }
-
-            guard !Task.isCancelled else {
-                isMapMoving = false
-                return
-            }
-
-            // デバウンス完了、API呼び出し開始直前にフラグをオフ
-            // (viewModel.isLoadingが引き継ぐ)
-            isMapMoving = false
-
-            // 新しい座標で投稿を取得（選択された範囲で）
-            await viewModel.fetchNearbyPostsForCoordinate(
-                latitude: newCoordinate.latitude,
-                longitude: newCoordinate.longitude,
-                radius: selectedRadius
-            )
-
-            lastFetchedCoordinate = newCoordinate
-        }
-    }
+    // 地図移動時の自動取得機能を削除
+    // onMapRegionChanged関数を削除
 }
 
 // MARK: - News Carousel Bottom Sheet
@@ -1036,6 +963,8 @@ struct Triangle: Shape {
         return path
     }
 }
+
+// MARK: - Quick Voice Post Sheet
 
 #Preview {
     ContentView()

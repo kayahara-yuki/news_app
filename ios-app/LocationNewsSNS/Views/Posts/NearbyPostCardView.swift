@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import Combine
 
 // MARK: - Date Formatter Singleton
 
@@ -22,6 +23,10 @@ struct NearbyPostCardView: View {
     let onUserTap: (() -> Void)?
 
     @State private var showingFullImage = false
+    @State private var currentTime = Date()
+
+    // リアルタイム更新用のTimer（1分ごと）
+    private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Button(action: onTap) {
@@ -42,11 +47,20 @@ struct NearbyPostCardView: View {
 
                 // インタラクション（いいね、コメント、時間）
                 interactionSection
+
+                // 残り時間表示（ステータス投稿のみ）
+                if let remainingTimeText = post.remainingTimeText {
+                    remainingTimeSection(text: remainingTimeText)
+                }
             }
             .padding(12)
             .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(PlainButtonStyle())
+        .onReceive(timer) { _ in
+            // 1分ごとに現在時刻を更新して再描画をトリガー
+            currentTime = Date()
+        }
     }
 
     // MARK: - Header Section
@@ -92,6 +106,22 @@ struct NearbyPostCardView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Color.red)
+                .cornerRadius(6)
+            }
+
+            // 「まもなく削除されます」バッジ
+            if post.shouldShowExpiringBadge {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 11))
+                    Text("まもなく削除")
+                        .font(.system(size: 10))
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.orange)
                 .cornerRadius(6)
             }
         }
@@ -156,6 +186,25 @@ struct NearbyPostCardView: View {
 
             Spacer()
         }
+    }
+
+    // MARK: - Remaining Time Section
+
+    @ViewBuilder
+    private func remainingTimeSection(text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock")
+                .font(.system(size: 12))
+                .foregroundColor(.orange)
+            Text(text)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.orange)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(8)
     }
 
     // MARK: - Interaction Section

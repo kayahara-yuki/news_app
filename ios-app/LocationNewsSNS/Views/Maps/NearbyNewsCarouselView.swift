@@ -45,11 +45,35 @@ struct NearbyNewsCarouselView: View {
     @State private var scrollPosition: String?
 
     var body: some View {
-        if news.isEmpty {
-            emptyStateView
-        } else {
-            carouselContent
+        VStack(alignment: .leading, spacing: 8) {
+            // ヘッダー: 近くのニュース
+            headerView
+
+            if news.isEmpty {
+                emptyStateView
+            } else {
+                carouselContent
+            }
         }
+    }
+
+    // MARK: - Header
+
+    @ViewBuilder
+    private var headerView: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "newspaper.fill")
+                .font(.system(size: 14))
+                .foregroundColor(.blue)
+
+            Text("近くのニュース")
+                .font(.headline)
+                .fontWeight(.semibold)
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
     }
 
     // MARK: - Carousel Content
@@ -222,7 +246,8 @@ struct CarouselNewsCardView: View {
                         .frame(height: 28, alignment: .top)
                 }
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .frame(width: 280, height: 165)
         .background(
             RoundedRectangle(cornerRadius: 16)

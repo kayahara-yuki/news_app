@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - Post Detail Sheet (X/Twitter風)
 
@@ -18,6 +19,14 @@ struct PostDetailSheet: View {
     @State private var showDeleteAlert = false
     @State private var showActionSheet = false
 
+    // 音声再生用
+    @StateObject private var audioService = AudioService()
+    @State private var audioLoadError: String?
+
+    // リアルタイム更新用
+    @State private var currentTime = Date()
+    private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+
     init(post: Post) {
         self.post = post
         _likeCount = State(initialValue: post.likeCount)
@@ -35,6 +44,11 @@ struct PostDetailSheet: View {
 
                         // 投稿内容
                         postContentSection
+
+                        // 音声プレイヤー（音声URLが存在する場合）
+                        if isAudioPost {
+                            audioPlayerSection
+                        }
 
                         // バッジ
                         badgesSection
@@ -67,21 +81,23 @@ struct PostDetailSheet: View {
             .navigationTitle("投稿")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("閉じる") {
-                        dismiss()
-                    }
-                }
-
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    // 3点リーダーメニュー（自分の投稿の場合のみ）
-                    if post.user.id == authService.currentUser?.id {
-                        Menu {
-                            Button(role: .destructive, action: { showDeleteAlert = true }) {
-                                Label("投稿を削除", systemImage: "trash")
+                    HStack(spacing: 16) {
+                        // 3点リーダーメニュー（自分の投稿の場合のみ）
+                        if post.user.id == authService.currentUser?.id {
+                            Menu {
+                                Button(role: .destructive, action: { showDeleteAlert = true }) {
+                                    Label("投稿を削除", systemImage: "trash")
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                                    .foregroundColor(.primary)
                             }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
+                        }
+
+                        // 閉じるボタン（×アイコン）
+                        Button(action: { dismiss() }) {
+                            Image(systemName: "xmark")
                                 .foregroundColor(.primary)
                         }
                     }
@@ -102,6 +118,10 @@ struct PostDetailSheet: View {
                 loadComments()
                 checkLikeStatus()
                 refreshPostData()
+            }
+            .onReceive(timer) { _ in
+                // 1分ごとに現在時刻を更新して残り時間表示を再描画
+                currentTime = Date()
             }
         }
     }
@@ -205,6 +225,17 @@ struct PostDetailSheet: View {
                 .padding(.vertical, 4)
                 .background(Color.gray)
                 .cornerRadius(12)
+
+            // 「まもなく削除されます」バッジ
+            if post.shouldShowExpiringBadge {
+                Label("まもなく削除", systemImage: "clock.fill")
+                    .font(.caption)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.orange)
+                    .cornerRadius(12)
+            }
         }
         .padding(.horizontal)
         .padding(.bottom, 8)
@@ -237,11 +268,31 @@ struct PostDetailSheet: View {
 
     @ViewBuilder
     private var timestampSection: some View {
-        Text(post.createdAt.formatted(date: .abbreviated, time: .shortened))
-            .font(.subheadline)
-            .foregroundColor(.secondary)
-            .padding(.horizontal)
-            .padding(.vertical, 4)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(post.createdAt.formatted(date: .abbreviated, time: .shortened))
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            // 残り時間表示（ステータス投稿のみ）
+            if let remainingTimeText = post.remainingTimeText {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 14))
+                        .foregroundColor(.orange)
+                    Text(remainingTimeText)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.orange)
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(8)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.vertical, 4)
     }
 
     // MARK: - Engagement Stats Section
@@ -319,6 +370,54 @@ struct PostDetailSheet: View {
         }
     }
 
+    // MARK: - Audio Player Section
+
+    /// 音声投稿かどうかを判定
+    private var isAudioPost: Bool {
+        guard let urlString = post.url else { return false }
+        return urlString.hasSuffix(".m4a") ||
+               urlString.hasSuffix(".mp3") ||
+               urlString.hasSuffix(".wav") ||
+               urlString.hasSuffix(".aac")
+    }
+
+    @ViewBuilder
+    private var audioPlayerSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // 音声メッセージラベル
+            HStack {
+                Image(systemName: "waveform")
+                    .foregroundColor(.blue)
+                Text("音声メッセージ")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+            }
+            .padding(.horizontal)
+
+            // AudioPlayerView
+            if let audioURLString = post.url,
+               let audioURL = URL(string: audioURLString) {
+                AudioPlayerView(audioURL: audioURL, audioService: audioService)
+                    .padding(.horizontal)
+            } else if let errorMessage = audioLoadError {
+                // エラー表示
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                .padding()
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.horizontal)
+            }
+        }
+        .padding(.vertical, 12)
+    }
+
     // MARK: - Comments Section
 
     @ViewBuilder
@@ -373,6 +472,13 @@ struct PostDetailSheet: View {
                 likeCount += 1
                 isLiked = true
             }
+
+            // 投稿が更新されたことを通知（地図の吹き出しを更新するため）
+            NotificationCenter.default.post(
+                name: .postUpdated,
+                object: nil,
+                userInfo: ["postId": post.id, "likeCount": likeCount]
+            )
         }
     }
 
@@ -430,7 +536,10 @@ struct PostDetailSheet: View {
             commentCount: 10,
             shareCount: 5,
             createdAt: Date().addingTimeInterval(-3600),
-            updatedAt: Date()
+            updatedAt: Date(),
+            audioURL: nil,
+            isStatusPost: false,
+            expiresAt: nil
         )
     )
     

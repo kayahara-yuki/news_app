@@ -36,17 +36,23 @@ class NewsService: ObservableObject {
 
     /// 現在地の近くのニュースを取得（Google News RSS）
     func fetchNearbyNews(userLocation: CLLocationCoordinate2D, radiusKm: Double = 500) async {
+        print("🔍 [NewsService] fetchNearbyNews開始 - lat=\(userLocation.latitude), lng=\(userLocation.longitude), radius=\(radiusKm)km")
         isLoading = true
         error = nil
 
         do {
             // 1. 逆ジオコーディング: 座標 -> 都市名
+            print("🌍 [NewsService] 逆ジオコーディング開始")
             guard let cityName = await reverseGeocodeCoordinate(userLocation) else {
+                print("❌ [NewsService] 逆ジオコーディング失敗")
                 throw NewsServiceError.reverseGeocodingFailed
             }
+            print("✅ [NewsService] 逆ジオコーディング成功 - 都市名: \(cityName)")
 
             // 2. Google News RSSから都市名でニュースを取得
+            print("📡 [NewsService] Google News API呼び出し開始 - keyword: \(cityName)")
             let feed = try await repository.fetchNewsByKeyword(cityName)
+            print("✅ [NewsService] API呼び出し成功 - 取得件数: \(feed.items.count)")
 
             // 3. ニュースに距離情報を追加（全て同じ都市なので距離は0）
             let newsWithDistance = feed.items.map { story -> NewsStory in
@@ -56,24 +62,34 @@ class NewsService: ObservableObject {
                 return mutableStory
             }
 
-            // 4. 最新順にソート（念のため二重チェック）
-            let sortedNews = newsWithDistance.sorted { news1, news2 in
+            // 4. 3日以内の記事のみにフィルタリング
+            let threeDaysAgo = Calendar.current.date(byAdding: .day, value: -3, to: Date())!
+            let filteredNews = newsWithDistance.filter { story in
+                guard let pubDate = story.pubDate else { return false }
+                return pubDate >= threeDaysAgo
+            }
+
+            // 5. 最新順にソート（念のため二重チェック）
+            let sortedNews = filteredNews.sorted { news1, news2 in
                 guard let date1 = news1.pubDate, let date2 = news2.pubDate else {
                     return news1.pubDate != nil
                 }
                 return date1 > date2 // 降順（最新が先頭）
             }
 
-            // 5. 全データをキャッシュして、最初の10件のみ表示
+            // 6. 全データをキャッシュして、最初の10件のみ表示
             allNewsCache = sortedNews
             currentPage = 0
             nearbyNews = Array(allNewsCache.prefix(itemsPerPage))
+            print("📊 [NewsService] ニュース表示準備完了 - 表示件数: \(nearbyNews.count), 全体キャッシュ: \(allNewsCache.count)")
 
         } catch {
+            print("❌ [NewsService] エラー発生: \(error.localizedDescription)")
             self.error = error
         }
 
         isLoading = false
+        print("🏁 [NewsService] fetchNearbyNews完了 - 最終件数: \(nearbyNews.count)")
     }
 
     // MARK: - Pagination
@@ -117,25 +133,34 @@ class NewsService: ObservableObject {
 
         // キャッシュチェック
         if let cached = reverseGeocodeCache[cacheKey] {
+            print("💾 [NewsService] キャッシュから都市名取得: \(cached)")
             return cached
         }
 
         do {
             let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            print("🌐 [NewsService] CLGeocoder呼び出し中...")
             let placemarks = try await geocoder.reverseGeocodeLocation(location)
+            print("✅ [NewsService] CLGeocoder成功 - placemarks件数: \(placemarks.count)")
 
             if let placemark = placemarks.first {
                 // 都市名を取得（locality優先、なければadministrativeArea）
                 let cityName = placemark.locality ?? placemark.administrativeArea ?? placemark.country
+                print("📍 [NewsService] Placemark情報 - locality: \(placemark.locality ?? "nil"), administrativeArea: \(placemark.administrativeArea ?? "nil"), country: \(placemark.country ?? "nil")")
 
                 if let cityName = cityName {
                     // キャッシュに保存
                     reverseGeocodeCache[cacheKey] = cityName
+                    print("✅ [NewsService] 都市名取得成功: \(cityName)")
                     return cityName
+                } else {
+                    print("⚠️ [NewsService] 都市名が取得できませんでした")
                 }
+            } else {
+                print("⚠️ [NewsService] Placemarkが空です")
             }
         } catch {
-            // Reverse geocoding error
+            print("❌ [NewsService] 逆ジオコーディングエラー: \(error.localizedDescription)")
         }
 
         return nil

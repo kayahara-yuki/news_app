@@ -16,6 +16,8 @@ struct CreatePostRequest: Codable {
     let emergencyLevel: EmergencyLevel?
     let tags: [String]?
     let images: [UIImage] // エンコードされない
+    let isStatusPost: Bool? // ステータス投稿フラグ
+    let expiresAt: Date? // 自動削除予定日時
 
     enum CodingKeys: String, CodingKey {
         case content
@@ -28,6 +30,8 @@ struct CreatePostRequest: Codable {
         case allowComments = "allow_comments"
         case emergencyLevel = "emergency_level"
         case tags
+        case isStatusPost = "is_status_post"
+        case expiresAt = "expires_at"
     }
 
     init(
@@ -41,7 +45,9 @@ struct CreatePostRequest: Codable {
         allowComments: Bool = true,
         emergencyLevel: EmergencyLevel? = nil,
         tags: [String]? = nil,
-        images: [UIImage] = []
+        images: [UIImage] = [],
+        isStatusPost: Bool? = nil,
+        expiresAt: Date? = nil
     ) {
         self.content = content
         self.url = url
@@ -54,6 +60,8 @@ struct CreatePostRequest: Codable {
         self.emergencyLevel = emergencyLevel
         self.tags = tags
         self.images = images
+        self.isStatusPost = isStatusPost
+        self.expiresAt = expiresAt
     }
 
     // Codable conformance for properties other than images
@@ -69,6 +77,8 @@ struct CreatePostRequest: Codable {
         try container.encode(allowComments, forKey: .allowComments)
         try container.encodeIfPresent(emergencyLevel, forKey: .emergencyLevel)
         try container.encodeIfPresent(tags, forKey: .tags)
+        try container.encodeIfPresent(isStatusPost, forKey: .isStatusPost)
+        try container.encodeIfPresent(expiresAt, forKey: .expiresAt)
     }
 
     init(from decoder: Decoder) throws {
@@ -83,6 +93,8 @@ struct CreatePostRequest: Codable {
         allowComments = try container.decode(Bool.self, forKey: .allowComments)
         emergencyLevel = try container.decodeIfPresent(EmergencyLevel.self, forKey: .emergencyLevel)
         tags = try container.decodeIfPresent([String].self, forKey: .tags)
+        isStatusPost = try container.decodeIfPresent(Bool.self, forKey: .isStatusPost)
+        expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
         images = [] // デコード時は空配列
     }
 }
@@ -350,7 +362,7 @@ struct SaveDraftRequest: Codable {
     let emergencyLevel: EmergencyLevel?
     let tags: [String]?
     let images: [UIImage] // エンコードされない
-    
+
     enum CodingKeys: String, CodingKey {
         case content
         case latitude
@@ -361,7 +373,7 @@ struct SaveDraftRequest: Codable {
         case emergencyLevel = "emergency_level"
         case tags
     }
-    
+
     init(content: String, latitude: Double? = nil, longitude: Double? = nil, locationName: String? = nil, visibility: PostVisibility = .public, allowComments: Bool = true, emergencyLevel: EmergencyLevel? = nil, tags: [String]? = nil, images: [UIImage] = []) {
         self.content = content
         self.latitude = latitude
@@ -373,7 +385,7 @@ struct SaveDraftRequest: Codable {
         self.tags = tags
         self.images = images
     }
-    
+
     // Codable conformance
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -386,7 +398,7 @@ struct SaveDraftRequest: Codable {
         try container.encodeIfPresent(emergencyLevel, forKey: .emergencyLevel)
         try container.encodeIfPresent(tags, forKey: .tags)
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         content = try container.decode(String.self, forKey: .content)
@@ -401,54 +413,4 @@ struct SaveDraftRequest: Codable {
     }
 }
 
-/// 下書きデータモデル
-struct PostDraft: Identifiable, Codable {
-    let id: UUID
-    let content: String
-    let latitude: Double?
-    let longitude: Double?
-    let locationName: String?
-    let visibility: PostVisibility
-    let allowComments: Bool
-    let emergencyLevel: EmergencyLevel?
-    let tags: [String]?
-    let mediaFiles: [MediaFile]?
-    let createdAt: Date
-    let updatedAt: Date
-    
-    enum CodingKeys: String, CodingKey {
-        case id
-        case content
-        case latitude
-        case longitude
-        case locationName = "location_name"
-        case visibility
-        case allowComments = "allow_comments"
-        case emergencyLevel = "emergency_level"
-        case tags
-        case mediaFiles = "media_files"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-    }
-    
-    var preview: String {
-        let maxLength = 50
-        if content.count <= maxLength {
-            return content
-        } else {
-            return String(content.prefix(maxLength)) + "..."
-        }
-    }
-    
-    var hasMedia: Bool {
-        return mediaFiles?.isEmpty == false
-    }
-    
-    var hasLocation: Bool {
-        return latitude != nil && longitude != nil
-    }
-    
-    var hasTags: Bool {
-        return tags?.isEmpty == false
-    }
-}
+// Note: PostDraft model is defined in PostDraft.swift

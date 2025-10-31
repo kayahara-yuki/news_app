@@ -22,9 +22,73 @@ struct Post: Codable, Identifiable {
     let createdAt: Date
     let updatedAt: Date
 
+    // 新規追加: 音声メッセージ投稿機能
+    let audioURL: String?
+
+    // 新規追加: ステータス投稿機能
+    let isStatusPost: Bool
+    let expiresAt: Date?
+
     // カルーセル表示用のプロパティ
     var userName: String? { user.displayName ?? user.username }
     var distance: Double? = nil // 現在位置からの距離（メートル）
+
+    // MARK: - Computed Properties
+
+    /// 投稿が期限切れかどうか
+    var isExpired: Bool {
+        guard let expiresAt = expiresAt else { return false }
+        return Date() > expiresAt
+    }
+
+    /// 残り時間（秒）
+    var remainingTime: TimeInterval? {
+        guard let expiresAt = expiresAt else { return nil }
+        return expiresAt.timeIntervalSinceNow
+    }
+
+    /// 残り時間のテキスト表示
+    /// - Returns: 「あと2時間で削除」「あと45分で削除」「まもなく削除」「削除済み」
+    var remainingTimeText: String? {
+        guard let remainingTime = remainingTime else { return nil }
+
+        // 期限切れ
+        if remainingTime <= 0 {
+            return "削除済み"
+        }
+
+        // 1分未満
+        if remainingTime < 60 {
+            return "まもなく削除"
+        }
+
+        // 1時間未満
+        if remainingTime < 3600 {
+            let minutes = Int(remainingTime / 60)
+            return "あと\(minutes)分で削除"
+        }
+
+        // 1時間以上
+        let hours = Int(remainingTime / 3600)
+        return "あと\(hours)時間で削除"
+    }
+
+    /// 「まもなく削除されます」バッジを表示すべきかどうか
+    /// - Returns: 残り時間が1時間未満かつ期限切れでない場合にtrue
+    var shouldShowExpiringBadge: Bool {
+        guard let remainingTime = remainingTime else { return false }
+        return remainingTime > 0 && remainingTime < 3600
+    }
+
+    /// 投稿からステータスタイプを推測
+    ///
+    /// 投稿のcontentがStatusTypeのrawValueと一致する場合、該当するStatusTypeを返す
+    ///
+    /// - Returns: 一致するStatusType、またはnil
+    var statusType: StatusType? {
+        guard isStatusPost else { return nil }
+        return StatusType.allCases.first { $0.rawValue == content }
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -43,6 +107,9 @@ struct Post: Codable, Identifiable {
         case shareCount = "share_count"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case audioURL = "audio_url"
+        case isStatusPost = "is_status_post"
+        case expiresAt = "expires_at"
     }
 }
 

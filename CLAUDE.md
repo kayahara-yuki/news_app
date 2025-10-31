@@ -47,7 +47,9 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 **Specs** (`.kiro/specs/`) - Formalize development process for individual features
 
 ### Active Specifications
-- Check `.kiro/specs/` for active specifications
+- **viral-quick-win-features**: 音声投稿機能＋ワンタップステータス共有（初期化済み）
+- **location-news-sns**: 位置情報ベースニュース共有SNSプラットフォーム（実装中）
+- Check `.kiro/specs/` for all specifications
 - Use `/kiro:spec-status [feature-name]` to check progress
 
 ## Development Guidelines
